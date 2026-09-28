@@ -573,6 +573,9 @@ const INVALID_CODES: Record<string, string> = {
   blocked: "Windows ya da antivirüs programı bu dosyayı engelledi.",
   launch_target: "Başlatılacak dosya bulunamadı; bir dosya seç.",
   install_running: "Bir oyun kuruluyor; kurulum bitince güncelleyebilirsin.",
+  update_signature: "Güncelleme doğrulanamadı: imzası bu uygulamanın anahtarıyla ya da duyurulan sürümle uyuşmuyor. Kurulmadı.",
+  update_missing: "GitHub'daki son yayında güncelleme bilgisi (latest.json) bulunamadı.",
+  update_platform: "Yeni sürüm bu sistem ya da paket türü için yayımlanmamış.",
   version: "Geçersiz sürüm numarası.",
   store: "Bu mağazada arama yapılamıyor.",
 };
@@ -581,6 +584,7 @@ const INVALID_CODES: Record<string, string> = {
 const DETAILED_CODES: Record<string, (detail: string) => string> = {
   installer_failed: (code) => `Kurulum programı hata verdi (çıkış kodu ${code}).`,
   uninstaller_failed: (code) => `Kaldırma programı hata verdi (çıkış kodu ${code}).`,
+  update_failed: (detail) => `Güncelleme başarısız: ${detail}`,
 };
 
 const ERROR_KINDS: Record<CmdError["kind"], string> = {

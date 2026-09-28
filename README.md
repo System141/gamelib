@@ -154,7 +154,7 @@ Aynı derleme `.github/workflows/build.yml` ile GitHub Actions'ta da yapılır (
 
 ## Otomatik güncelleme
 
-Uygulama açıldıktan kısa süre sonra ve birkaç saatte bir bu deponun son yayınındaki `latest.json` dosyasına bakar. Yeni sürüm varsa üstte "GameLib X hazır · Şimdi güncelle" çıkar. Güncelleme indirilir, yayının imzası uygulamaya gömülü açık anahtarla doğrulanır ve kurulup uygulama yeniden açılır (Windows'ta yönetici izni gerekmez). Otomatik denetimi Ayarlar → Güncellemeler'den kapatabilir, "Güncellemeleri denetle" ile elle bakabilirsin. Bir oyun kurulurken güncelleme başlamaz; süren indirmeler yeni sürüm açılınca kaldığı yerden devam eder.
+Uygulama açıldıktan kısa süre sonra ve birkaç saatte bir bu deponun son yayınındaki `latest.json` dosyasına bakar. Yeni sürüm varsa üstte "GameLib X hazır · Şimdi güncelle" çıkar. Güncelleme indirilir, yayının imzası uygulamaya gömülü açık anahtarla doğrulanır ve kurulup uygulama yeniden açılır (Windows'ta yönetici izni gerekmez). İmza sürüm numarasını da kapsar; `latest.json` değiştirilerek eski bir sürüm yeniymiş gibi kurdurulamaz. Otomatik denetimi Ayarlar → Güncellemeler'den kapatabilir, "Güncellemeleri denetle" ile elle bakabilirsin. Bir oyun kurulurken güncelleme başlamaz; süren indirmeler yeni sürüm açılınca kaldığı yerden devam eder.
 
 Bunun çalışması için depo herkese açık olmalı ve sürümler imzalanmalıdır. İmzasız bir derlemeyle kurulan GameLib kendini güncelleyemez; Ayarlar'da bunu söyler. İmzalı ilk sürüm bir kez elle kurulur, sonrakiler kendiliğinden gelir.
 

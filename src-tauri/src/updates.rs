@@ -4,6 +4,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use gamelib_core::app::{App, release_page};
 use gamelib_core::{Error, ErrorInfo, ErrorKind, unix_now};
@@ -13,8 +14,9 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::error::{CmdError, CmdResult};
 
-/// Download progress of an update: `{downloaded, total}`.
+/// Download progress of an update: `{downloaded, total}`, at most every `PROGRESS_EVERY`.
 const EVENT_PROGRESS: &str = "update:progress";
+const PROGRESS_EVERY: Duration = Duration::from_millis(100);
 
 /// The last check: when it ran and the update it found, kept for installing it (again, if a
 /// try failed).
@@ -75,10 +77,26 @@ fn status(app: &AppHandle, configured: bool, last: &LastCheck) -> UpdateStatus {
     }
 }
 
-fn network(e: impl std::fmt::Display) -> CmdError {
-    ErrorInfo {
-        kind: ErrorKind::Network,
-        message: e.to_string(),
+/// What the user is told when checking or updating fails.
+fn update_error(e: tauri_plugin_updater::Error) -> CmdError {
+    use tauri_plugin_updater::Error as U;
+    match e {
+        U::Reqwest(_) | U::Network(_) | U::Http(_) => ErrorInfo {
+            kind: ErrorKind::Network,
+            message: e.to_string(),
+        },
+        // Not signed with the key built into this app, or signed for another version.
+        U::Minisign(_)
+        | U::Base64(_)
+        | U::SignatureUtf8(_)
+        | U::SignedVersionMismatch { .. }
+        | U::MissingSignedVersion => Error::Invalid("update_signature").into(),
+        // No latest.json in the latest release (or no release at all).
+        U::ReleaseNotFound => Error::Invalid("update_missing").into(),
+        // The release has nothing for this system and package type.
+        U::TargetNotFound(_) | U::TargetsNotFound(_) => Error::Invalid("update_platform").into(),
+        U::AuthenticationFailed => Error::Cancelled.into(),
+        other => Error::Failed("update_failed", other.to_string()).into(),
     }
 }
 
@@ -99,10 +117,10 @@ pub async fn check_update(
     }
     let found = app
         .updater()
-        .map_err(network)?
+        .map_err(update_error)?
         .check()
         .await
-        .map_err(network)?;
+        .map_err(update_error)?;
     let mut last = pending.last();
     *last = LastCheck {
         at: Some(unix_now()),
@@ -139,19 +157,24 @@ pub async fn install_update(
     let update = pending.last().found.clone().ok_or(Error::NotFound)?;
     let emitter = app.clone();
     let mut downloaded: u64 = 0;
+    let mut emitted: Option<Instant> = None;
     update
         .download_and_install(
             move |chunk, total| {
                 downloaded += chunk as u64;
-                let _ = emitter.emit(
-                    EVENT_PROGRESS,
-                    serde_json::json!({ "downloaded": downloaded, "total": total }),
-                );
+                let done = total.is_some_and(|t| downloaded >= t);
+                if done || emitted.is_none_or(|at| at.elapsed() >= PROGRESS_EVERY) {
+                    emitted = Some(Instant::now());
+                    let _ = emitter.emit(
+                        EVENT_PROGRESS,
+                        serde_json::json!({ "downloaded": downloaded, "total": total }),
+                    );
+                }
             },
             || {},
         )
         .await
-        .map_err(network)?;
+        .map_err(update_error)?;
     app.restart()
 }
 
