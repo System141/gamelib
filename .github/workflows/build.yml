@@ -1,5 +1,6 @@
-# Checks every push. Installers are built on demand (Actions → Build → Run workflow) and for
-# version tags (v*), which also publish them as a GitHub release.
+# Checks every push. Installers are built on demand (Actions → Build → Run workflow), for pushes
+# whose last commit message contains "[installer]" (Windows only), and for version tags (v*),
+# which also publish them as a GitHub release.
 name: Build
 
 on:
@@ -59,14 +60,16 @@ jobs:
 
   plan:
     name: Plan installers
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') ||
+      contains(github.event.head_commit.message, '[installer]')
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - id: plan
         env:
-          PLATFORMS: ${{ inputs.platforms || 'all' }}
+          PLATFORMS: ${{ inputs.platforms || (startsWith(github.ref, 'refs/tags/v') && 'all') || 'windows' }}
         run: |
           all='[
             {"platform": "windows", "os": "windows-latest", "args": "--bundles nsis"},

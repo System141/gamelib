@@ -13,7 +13,7 @@ Steam'deki **tüm çıkmış oyunları** kapak görselleriyle birlikte bilgisaya
 Rust ya da Node kurmana gerek yok: kurulum dosyaları GitHub Actions'ta derlenir.
 
 1. GitHub'da depoyu aç: **Actions → Build → Run workflow**. Sistem olarak `windows`'u (ya da `all`, `macos`, `linux`) seç ve başlat.
-2. Derleme yaklaşık 15–20 dakika sürer. Bitince çalıştırmayı aç ve sayfanın altındaki **Artifacts** bölümünden paketi indir. Örneğin `gamelib-windows` şunları içerir:
+2. Derleme yaklaşık 15–20 dakika sürer. Bitince çalıştırmayı aç ve sayfanın altındaki **Artifacts** bölümünden paketi indirip zip dosyasını aç. Örneğin `gamelib-windows` şunları içerir:
    - `GameLib_0.1.0_x64-setup.exe`: masaüstü uygulamasının kurulumu.
    - `gamelib-cli-windows-x64.exe`: komut satırı aracı (tarayıcı önizlemesi için, aşağıya bak).
 3. Kurulumu çalıştır. Paket imzasız olduğu için Windows "Windows bilgisayarınızı korudu" uyarısı gösterebilir: **Ek bilgi → Yine de çalıştır**.
@@ -23,7 +23,7 @@ Diğer sistemler:
 - **macOS** (`gamelib-macos`): `.dmg` dosyasını açıp GameLib'i Uygulamalar klasörüne sürükle. İlk açılışta uyarı çıkarsa **Sistem Ayarları → Gizlilik ve Güvenlik → Yine de Aç**.
 - **Linux** (`gamelib-linux`): `.deb` ya da `.rpm` paketini kur, ya da `.AppImage` dosyasını `chmod +x` ile çalıştırılabilir yapıp aç.
 
-Artifacts 7 gün saklanır. `v` ile başlayan bir sürüm etiketi (ör. `v0.1.0`) gönderildiğinde dosyalar kalıcı olarak bir GitHub Release'e de eklenir.
+Artifacts 7 gün saklanır. Windows paketi, son commit mesajında `[installer]` geçen her push'ta da üretilir. `v` ile başlayan bir sürüm etiketi (ör. `v0.1.0`) gönderildiğinde tüm sistemlerin dosyaları kalıcı olarak bir GitHub Release'e de eklenir.
 
 ## Özellikler
 
