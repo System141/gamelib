@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri",
-    "fixture": "cargo run --release -p gamelib-core --bin gamelib-cli -- export-fixture --out src/mocks/fixture.json",
+    "serve": "cargo run --release -p gamelib-cli -- serve",
+    "fixture": "cargo run --release -p gamelib-cli -- export-fixture --out src/mocks/fixture.json",
     "format": "prettier --write src index.html vite.config.ts",
     "format:check": "prettier --check src index.html vite.config.ts"
   },

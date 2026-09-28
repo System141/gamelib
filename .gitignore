@@ -13,6 +13,7 @@ src-tauri/gen/schemas/
 *.db
 *.db-wal
 *.db-shm
+*.job-lock
 
 # Misc
 *.log

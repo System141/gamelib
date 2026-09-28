@@ -1,6 +1,9 @@
-//! Headless tool for the GameLib catalog: sync, query and inspect without the desktop app.
+//! Headless tool for the GameLib catalog: sync, query and inspect without the desktop app, or
+//! serve the catalog to the browser preview.
 //!
 //! Run `gamelib-cli help` for usage.
+
+mod serve;
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -25,6 +28,8 @@ const USAGE: &str = "\
 gamelib-cli [--db PATH] <command> [options]
 
 Commands:
+  serve          Serve the catalog to the browser preview (`pnpm dev`) on 127.0.0.1
+                 [--port N] (default 1430)
   sync           Download the whole catalog
                  [--max-pages N] [--no-prune] [--fresh] [--no-featured] [--delay-ms N]
   new-releases   Fetch games released since the last check
@@ -39,20 +44,32 @@ Commands:
   check-link URL Follow a link's redirects without downloading it
   export-fixture Write UI mock data: --out PATH [--limit N] [--media N]
 
-The database defaults to ./gamelib.db. The desktop app keeps its own under the OS local data
-directory (e.g. ~/.local/share/com.gamelib.desktop/gamelib.db).";
+The database defaults to the desktop app's own file, so both see the same catalog:";
+
+/// The desktop app's bundle identifier (`identifier` in src-tauri/tauri.conf.json). Tauri keeps
+/// the app's local data under the OS local data directory in a folder with this name.
+const APP_IDENTIFIER: &str = "com.gamelib.desktop";
+
+/// The desktop app's database: Tauri's `app_local_data_dir()` plus `gamelib.db`
+/// (e.g. `%LOCALAPPDATA%\com.gamelib.desktop\gamelib.db` on Windows).
+fn default_db_path() -> PathBuf {
+    dirs::data_local_dir()
+        .map(|dir| dir.join(APP_IDENTIFIER).join("gamelib.db"))
+        .unwrap_or_else(|| PathBuf::from("gamelib.db"))
+}
 
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let db_path = take_value(&mut args, "--db")
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("gamelib.db"));
+        .unwrap_or_else(default_db_path);
     if args.is_empty() || matches!(args[0].as_str(), "help" | "-h" | "--help") {
-        println!("{USAGE}");
+        println!("{USAGE}\n  {}", default_db_path().display());
         return ExitCode::SUCCESS;
     }
     let command = args.remove(0);
     let result = match command.as_str() {
+        "serve" => cmd_serve(&db_path, args),
         "sync" => cmd_sync(&db_path, args),
         "new-releases" => cmd_new_releases(&db_path, args),
         "stats" => cmd_stats(&db_path),
@@ -138,6 +155,12 @@ fn print_json<T: Serialize>(value: &T) -> Result<()> {
 }
 
 // --- commands ---------------------------------------------------------------
+
+fn cmd_serve(db_path: &Path, mut args: Vec<String>) -> Result<()> {
+    let port = parse_num(take_value(&mut args, "--port"), "--port")?.unwrap_or(serve::DEFAULT_PORT);
+    ensure_empty(&args)?;
+    serve::run(db_path, port)
+}
 
 fn cmd_sync(db_path: &Path, mut args: Vec<String>) -> Result<()> {
     let mut opts = SyncOptions {
@@ -480,4 +503,20 @@ fn cmd_export_fixture(db_path: &Path, mut args: Vec<String>) -> Result<()> {
         out.display()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The default database must stay the desktop app's: same identifier, no directory override.
+    #[test]
+    fn default_db_is_the_desktop_apps() {
+        let conf = include_str!("../../../src-tauri/tauri.conf.json");
+        let conf: serde_json::Value = serde_json::from_str(conf).unwrap();
+        assert_eq!(conf["identifier"], APP_IDENTIFIER);
+        assert!(conf["app"].get("appDirectoriesOverride").is_none());
+        let path = default_db_path();
+        assert!(path.ends_with(Path::new(APP_IDENTIFIER).join("gamelib.db")));
+    }
 }

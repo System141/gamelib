@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/gamelib-core", "src-tauri"]
-# `cargo test` / `cargo run` at the root only touch the core crate, so they work
-# without the GTK/WebKit system libraries the Tauri shell needs on Linux.
-default-members = ["crates/gamelib-core"]
+members = ["crates/gamelib-core", "crates/gamelib-cli", "src-tauri"]
+# `cargo test` / `cargo run` at the root skip the Tauri shell, so they work without
+# the GTK/WebKit system libraries it needs on Linux.
+default-members = ["crates/gamelib-core", "crates/gamelib-cli"]
 
 [workspace.package]
 version = "0.1.0"
