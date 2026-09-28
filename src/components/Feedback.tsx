@@ -1,0 +1,137 @@
+// Sync banner, toasts, empty state and the error boundary.
+
+import clsx from "clsx";
+import { CircleCheck, CircleX, Info, LoaderCircle, SearchX, TriangleAlert, X } from "lucide-react";
+import { Component, type ErrorInfo, type ReactNode, useState } from "react";
+import { tr } from "../i18n/tr";
+import { nowSeconds } from "../lib/format";
+import { dismissToast, type ToastTone, useToasts } from "../lib/toast";
+import type { AppStatus } from "../lib/types";
+
+const STALE_AFTER_SECONDS = 7 * 86_400;
+
+/** Thin bar under the top bar: download progress, an interrupted download, or a stale catalog. */
+export function SyncBanner({ status, onResume, onRefresh }: { status: AppStatus | undefined; onResume: () => void; onRefresh: () => void }) {
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  if (!status) return null;
+
+  if (status.worker === "full") {
+    const p = status.progress;
+    const pct = p && p.total > 0 ? Math.min(100, (p.fetched / p.total) * 100) : null;
+    return (
+      <div className="relative shrink-0 border-b border-white/6 bg-ink-850/80">
+        <div className="flex h-9 items-center gap-3 px-8 text-[13px] text-ink-300">
+          <LoaderCircle size={14} className="animate-spin text-accent" />
+          <span className="text-ink-100">{tr.sync.phases[p?.phase ?? "starting"]}</span>
+          {p && p.total > 0 && <span className="tabular-nums">{tr.firstRun.progress(p.fetched, p.total)}</span>}
+        </div>
+        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-700">
+          {pct != null && <div className="h-full bg-gradient-to-r from-accent to-violet transition-[width] duration-500" style={{ width: `${pct}%` }} />}
+        </div>
+      </div>
+    );
+  }
+  if (status.worker) return null;
+
+  let kind: string | null = null;
+  let text = "";
+  let action = "";
+  let onAction = onRefresh;
+  if (status.resumable) {
+    kind = "resume";
+    text = tr.sync.resumable;
+    action = tr.sync.resume;
+    onAction = onResume;
+  } else if (status.lastSyncAt && nowSeconds() - status.lastSyncAt > STALE_AFTER_SECONDS) {
+    kind = "stale";
+    text = tr.sync.stale(status.lastSyncAt);
+    action = tr.sync.refresh;
+  }
+  if (!kind || dismissed === kind) return null;
+
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-3 border-b border-warning/15 bg-warning/6 px-8 text-[13px] text-warning">
+      <TriangleAlert size={14} />
+      <span className="text-ink-100">{text}</span>
+      <button type="button" onClick={onAction} className="font-semibold text-warning underline-offset-2 hover:underline">
+        {action}
+      </button>
+      <button type="button" onClick={() => setDismissed(kind)} className="ml-auto grid size-6 place-items-center rounded-md text-ink-400 hover:bg-white/8 hover:text-white" aria-label={tr.filters.close}>
+        <X size={13} />
+      </button>
+    </div>
+  );
+}
+
+const TOAST_ICON: Record<ToastTone, ReactNode> = {
+  success: <CircleCheck size={18} className="text-success" />,
+  info: <Info size={18} className="text-accent" />,
+  warning: <TriangleAlert size={18} className="text-warning" />,
+  error: <CircleX size={18} className="text-danger" />,
+};
+
+export function Toasts() {
+  const toasts = useToasts();
+  return (
+    <div className="pointer-events-none fixed right-6 bottom-6 z-[60] flex w-96 max-w-[90vw] flex-col gap-2" aria-live="polite">
+      {toasts.map((t) => (
+        <div key={t.id} className="animate-rise pointer-events-auto flex items-start gap-3 rounded-xl bg-ink-750/95 p-4 shadow-2xl shadow-black/60 ring-1 ring-white/10 backdrop-blur">
+          <span className="mt-0.5">{TOAST_ICON[t.tone]}</span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-ink-50">{t.title}</div>
+            {t.description && <div className="mt-0.5 text-[13px] text-ink-300">{t.description}</div>}
+          </div>
+          <button type="button" onClick={() => dismissToast(t.id)} className="grid size-6 place-items-center rounded-md text-ink-400 hover:bg-white/8 hover:text-white" aria-label={tr.filters.close}>
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function EmptyState({ view, canClear, onClear }: { view: "all" | "new" | "links"; canClear: boolean; onClear: () => void }) {
+  const links = view === "links" && !canClear;
+  return (
+    <div className="animate-fade-in max-w-md text-center">
+      <div className="mx-auto grid size-16 place-items-center rounded-2xl bg-white/4 ring-1 ring-white/8">
+        <SearchX size={26} className="text-ink-400" />
+      </div>
+      <h2 className="mt-5 font-display text-xl font-semibold text-ink-50">{links ? tr.linksView.emptyTitle : tr.empty.title}</h2>
+      <p className="mt-2 text-sm text-ink-400">{links ? tr.linksView.emptyText : tr.empty.text}</p>
+      {canClear && (
+        <button type="button" onClick={onClear} className={clsx("mt-5 h-9 rounded-lg bg-white/6 px-4 text-sm font-medium text-ink-100 ring-1 ring-white/10 hover:bg-white/10")}>
+          {tr.empty.clear}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("UI error", error, info.componentStack);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="app-backdrop grid h-full place-items-center p-8 text-center">
+        <div>
+          <h1 className="font-display text-2xl font-semibold text-ink-50">{tr.error.title}</h1>
+          <p className="mt-2 font-mono text-sm text-ink-400">{this.state.error.message}</p>
+          <button type="button" onClick={() => window.location.reload()} className="mt-6 h-10 rounded-lg bg-accent px-5 text-sm font-semibold text-ink-950">
+            {tr.error.reload}
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+

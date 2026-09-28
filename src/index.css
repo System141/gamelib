@@ -1,0 +1,174 @@
+@import "tailwindcss" source("../src");
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces: deep blue-black inks. */
+  --color-ink-950: #06080d;
+  --color-ink-900: #0b0f16;
+  --color-ink-850: #0f141d;
+  --color-ink-800: #131a25;
+  --color-ink-750: #182131;
+  --color-ink-700: #1d2839;
+  --color-ink-600: #283549;
+  --color-ink-500: #3a4a63;
+  --color-ink-400: #5d6d87;
+  --color-ink-300: #8d9ab0;
+  --color-ink-200: #b9c3d3;
+  --color-ink-100: #dfe6ef;
+  --color-ink-50: #f2f5fa;
+
+  /* Accents: Steam blue and a violet partner. */
+  --color-accent: #66c0f4;
+  --color-accent-strong: #3aa8ee;
+  --color-accent-soft: #9fd8fa;
+  --color-violet: #a78bfa;
+  --color-violet-strong: #8b6cf6;
+
+  /* Review tones, Steam Deck status and feedback colours. */
+  --color-review-pos: #5cc3ff;
+  --color-review-mixed: #d9b56a;
+  --color-review-neg: #ef6b4a;
+  --color-deck-verified: #59bf40;
+  --color-deck-playable: #ffc82c;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  --animate-fade-in: fade-in 180ms ease-out both;
+  --animate-rise: rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-slide-in: slide-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-progress: progress 1.2s ease-in-out infinite;
+
+  @keyframes shimmer {
+    0% { background-position: -150% 0; }
+    100% { background-position: 250% 0; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes slide-in {
+    from { opacity: 0.4; transform: translateX(24px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes progress {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(250%); }
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-ink-900);
+    color: var(--color-ink-100);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    overflow: hidden;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 35%, transparent);
+  }
+
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ink-600) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-600);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-500);
+    background-clip: padding-box;
+  }
+
+  dialog::backdrop {
+    background: rgb(3 5 9 / 0.72);
+    backdrop-filter: blur(6px);
+  }
+}
+
+/* Custom utilities (declared with @utility so variants like group-hover: work in Tailwind v4). */
+@utility app-backdrop {
+  background:
+    radial-gradient(1200px 520px at 12% -8%, rgb(102 192 244 / 0.13), transparent 60%),
+    radial-gradient(900px 480px at 92% -12%, rgb(167 139 250 / 0.12), transparent 62%),
+    var(--color-ink-900);
+}
+
+@utility glass {
+  background: rgb(11 15 22 / 0.72);
+  backdrop-filter: blur(18px) saturate(1.3);
+}
+
+@utility shimmer {
+  background-image: linear-gradient(100deg, var(--color-ink-800) 20%, var(--color-ink-700) 40%, var(--color-ink-800) 60%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+@utility text-gradient {
+  background: linear-gradient(100deg, var(--color-accent-soft), var(--color-violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility card-glow {
+  box-shadow:
+    0 18px 40px -18px rgb(0 0 0 / 0.8),
+    0 0 0 1px rgb(102 192 244 / 0.55),
+    0 10px 44px -10px rgb(102 192 244 / 0.45);
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
