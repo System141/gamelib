@@ -98,24 +98,41 @@ function ActiveFilters({ f, tagName }: { f: FiltersState; tagName: (tagid: numbe
     chips.push({ key: `p${p}`, label: tr.platforms[p], remove: () => f.togglePlatform(p) });
   }
   if (f.filters.deck) {
-    chips.push({ key: "deck", label: `Steam Deck: ${deckLabel(f.filters.deck === "verified" ? 3 : 2)}${f.filters.deck === "playable" ? "+" : ""}`, remove: () => f.patch({ deck: null }) });
+    chips.push({
+      key: "deck",
+      label: `Steam Deck: ${deckLabel(f.filters.deck === "verified" ? 3 : 2)}${f.filters.deck === "playable" ? "+" : ""}`,
+      remove: () => f.patch({ deck: null }),
+    });
   }
   if (f.filters.minReviewScore) {
     const label =
-      f.filters.minReviewScore >= 9 ? tr.filters.reviewsOverwhelming : f.filters.minReviewScore >= 8 ? tr.filters.reviewsVeryPositive : tr.filters.reviewsMostlyPositive;
+      f.filters.minReviewScore >= 9
+        ? tr.filters.reviewsOverwhelming
+        : f.filters.minReviewScore >= 8
+          ? tr.filters.reviewsVeryPositive
+          : tr.filters.reviewsMostlyPositive;
     chips.push({ key: "rev", label, remove: () => f.patch({ minReviewScore: null }) });
   }
   if (f.filters.freeOnly) chips.push({ key: "free", label: tr.card.free, remove: () => f.patch({ freeOnly: false }) });
-  if (f.filters.hasLinks && f.view !== "links") chips.push({ key: "links", label: tr.views.links, remove: () => f.patch({ hasLinks: false }) });
+  if (f.filters.hasLinks && f.view !== "links")
+    chips.push({ key: "links", label: tr.views.links, remove: () => f.patch({ hasLinks: false }) });
   if (f.showAdult) chips.push({ key: "adult", label: "+18", remove: () => f.setShowAdult(false) });
 
   if (chips.length === 0) return null;
   return (
     <div className="mt-4 flex flex-wrap items-center gap-2">
       {chips.map((c) => (
-        <span key={c.key} className="animate-fade-in inline-flex h-7 items-center gap-1 rounded-full bg-accent/10 pr-1 pl-3 text-[13px] text-accent-soft ring-1 ring-accent/25">
+        <span
+          key={c.key}
+          className="animate-fade-in inline-flex h-7 items-center gap-1 rounded-full bg-accent/10 pr-1 pl-3 text-[13px] text-accent-soft ring-1 ring-accent/25"
+        >
           {c.label}
-          <button type="button" onClick={c.remove} className="grid size-5 place-items-center rounded-full hover:bg-accent/20" aria-label={tr.filters.removeFilter(c.label)}>
+          <button
+            type="button"
+            onClick={c.remove}
+            className="grid size-5 place-items-center rounded-full hover:bg-accent/20"
+            aria-label={tr.filters.removeFilter(c.label)}
+          >
             <X size={12} />
           </button>
         </span>

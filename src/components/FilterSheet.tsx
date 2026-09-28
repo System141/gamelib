@@ -73,7 +73,12 @@ export function FilterSheet({ open, onClose, f, tags }: Props) {
       >
         <div className="flex items-center justify-between border-b border-white/6 px-6 py-4">
           <h2 className="font-display text-xl font-semibold text-ink-50">{tr.filters.title}</h2>
-          <button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-lg text-ink-300 hover:bg-white/8 hover:text-white" aria-label={tr.filters.close}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid size-9 place-items-center rounded-lg text-ink-300 hover:bg-white/8 hover:text-white"
+            aria-label={tr.filters.close}
+          >
             <X size={18} />
           </button>
         </div>
@@ -100,19 +105,27 @@ export function FilterSheet({ open, onClose, f, tags }: Props) {
                     aria-pressed={on}
                     className={clsx(
                       "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] ring-1 transition",
-                      on ? "bg-accent/15 text-accent-soft ring-accent/40" : "bg-white/4 text-ink-200 ring-white/6 hover:bg-white/8 hover:text-ink-50",
+                      on
+                        ? "bg-accent/15 text-accent-soft ring-accent/40"
+                        : "bg-white/4 text-ink-200 ring-white/6 hover:bg-white/8 hover:text-ink-50",
                     )}
                   >
                     {on && <Check size={13} />}
                     {t.name}
-                    <span className={clsx("text-[11px] tabular-nums", on ? "text-accent/80" : "text-ink-500")}>{formatNumber(t.gameCount)}</span>
+                    <span className={clsx("text-[11px] tabular-nums", on ? "text-accent/80" : "text-ink-500")}>
+                      {formatNumber(t.gameCount)}
+                    </span>
                   </button>
                 );
               })}
               {visibleTags.length === 0 && <p className="text-sm text-ink-400">{tr.filters.noTags}</p>}
             </div>
             {!tagQuery && tags.length > COLLAPSED_TAGS && (
-              <button type="button" onClick={() => setShowAll((s) => !s)} className="mt-3 text-sm font-medium text-accent hover:text-accent-soft">
+              <button
+                type="button"
+                onClick={() => setShowAll((s) => !s)}
+                className="mt-3 text-sm font-medium text-accent hover:text-accent-soft"
+              >
                 {showAll ? tr.filters.showFewerTags : tr.filters.showAllTags(tags.length)}
               </button>
             )}
@@ -146,23 +159,39 @@ export function FilterSheet({ open, onClose, f, tags }: Props) {
           </Section>
 
           <Section title={tr.filters.reviews}>
-            <Segmented options={reviewOptions} value={f.filters.minReviewScore} onChange={(minReviewScore) => f.patch({ minReviewScore })} small />
+            <Segmented
+              options={reviewOptions}
+              value={f.filters.minReviewScore}
+              onChange={(minReviewScore) => f.patch({ minReviewScore })}
+              small
+            />
           </Section>
 
           <Section title={tr.filters.other}>
             <div className="space-y-1">
               <Toggle label={tr.filters.freeOnly} checked={f.filters.freeOnly} onChange={(freeOnly) => f.patch({ freeOnly })} />
-              {f.view !== "links" && <Toggle label={tr.filters.hasLinks} checked={f.filters.hasLinks} onChange={(hasLinks) => f.patch({ hasLinks })} />}
+              {f.view !== "links" && (
+                <Toggle label={tr.filters.hasLinks} checked={f.filters.hasLinks} onChange={(hasLinks) => f.patch({ hasLinks })} />
+              )}
               <Toggle label={tr.filters.showAdult} hint={tr.filters.showAdultHint} checked={f.showAdult} onChange={f.setShowAdult} />
             </div>
           </Section>
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-white/6 px-6 py-4">
-          <button type="button" onClick={f.clear} disabled={f.activeCount === 0} className="text-sm font-medium text-ink-300 hover:text-white disabled:opacity-40">
+          <button
+            type="button"
+            onClick={f.clear}
+            disabled={f.activeCount === 0}
+            className="text-sm font-medium text-ink-300 hover:text-white disabled:opacity-40"
+          >
             {tr.filters.clearAll}
           </button>
-          <button type="button" onClick={onClose} className="h-10 rounded-lg bg-gradient-to-r from-accent-strong to-violet-strong px-5 text-sm font-semibold text-white shadow-lg shadow-accent/15 hover:brightness-110">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-10 rounded-lg bg-gradient-to-r from-accent-strong to-violet-strong px-5 text-sm font-semibold text-white shadow-lg shadow-accent/15 hover:brightness-110"
+          >
             {tr.filters.apply}
           </button>
         </div>
@@ -184,9 +213,22 @@ function Section({ title, count, icon, children }: { title: string; count?: numb
   );
 }
 
-function Segmented<T>({ options, value, onChange, small = false }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; small?: boolean }) {
+function Segmented<T>({
+  options,
+  value,
+  onChange,
+  small = false,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  small?: boolean;
+}) {
   return (
-    <div className="grid rounded-lg bg-ink-800 p-1 ring-1 ring-white/6" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+    <div
+      className="grid rounded-lg bg-ink-800 p-1 ring-1 ring-white/6"
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+    >
       {options.map((o) => (
         <button
           key={String(o.value)}

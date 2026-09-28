@@ -23,7 +23,10 @@ const TONE_DOT: Record<ReviewTone, string> = {
 export function ReviewDot({ game }: { game: Pick<GameCard, "reviewScore" | "reviewPct" | "reviewCount"> }) {
   const tone = reviewTone(game.reviewScore);
   return (
-    <span className={clsx("inline-flex items-center gap-1.5 tabular-nums", TONE_TEXT[tone])} title={reviewLabel(game.reviewScore, game.reviewCount)}>
+    <span
+      className={clsx("inline-flex items-center gap-1.5 tabular-nums", TONE_TEXT[tone])}
+      title={reviewLabel(game.reviewScore, game.reviewCount)}
+    >
       <span className={clsx("size-1.5 rounded-full", TONE_DOT[tone])} />
       {game.reviewCount > 0 ? formatPercent(game.reviewPct) : "—"}
     </span>
@@ -55,7 +58,10 @@ export function DeckBadge({ deck, compact = false }: { deck: DeckCompat; compact
   const color = deck === 3 ? "text-deck-verified" : deck === 2 ? "text-deck-playable" : "text-ink-400";
   return (
     <span
-      className={clsx("inline-flex items-center gap-1.5 rounded-full bg-white/5 font-medium ring-1 ring-white/10", compact ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm")}
+      className={clsx(
+        "inline-flex items-center gap-1.5 rounded-full bg-white/5 font-medium ring-1 ring-white/10",
+        compact ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm",
+      )}
       title={`${tr.detail.deck}: ${deckLabel(deck)}`}
     >
       <SteamIcon size={compact ? 12 : 14} className={color} />
@@ -64,7 +70,15 @@ export function DeckBadge({ deck, compact = false }: { deck: DeckCompat; compact
   );
 }
 
-export function PlatformIcons({ game, size = 13, className }: { game: Pick<GameCard, "win" | "mac" | "linux">; size?: number; className?: string }) {
+export function PlatformIcons({
+  game,
+  size = 13,
+  className,
+}: {
+  game: Pick<GameCard, "win" | "mac" | "linux">;
+  size?: number;
+  className?: string;
+}) {
   return (
     <span className={clsx("inline-flex items-center gap-1.5", className)}>
       {game.win && <WindowsIcon size={size} aria-label={tr.platforms.win} />}
@@ -87,11 +101,24 @@ export function PriceTag({
 }) {
   const big = size === "lg";
   if (game.isFree) {
-    return <span className={clsx("shrink-0 rounded-md bg-accent/12 font-semibold whitespace-nowrap text-accent-soft", big ? "px-3 py-1 text-base" : "px-1.5 py-0.5 text-xs")}>{tr.card.free}</span>;
+    return (
+      <span
+        className={clsx(
+          "shrink-0 rounded-md bg-accent/12 font-semibold whitespace-nowrap text-accent-soft",
+          big ? "px-3 py-1 text-base" : "px-1.5 py-0.5 text-xs",
+        )}
+      >
+        {tr.card.free}
+      </span>
+    );
   }
   if (!game.price) return null;
   if (game.discountPct > 0 && compact) {
-    return <span className="shrink-0 rounded-md bg-[#4c6b22]/70 px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap text-[#beee11]">{game.price}</span>;
+    return (
+      <span className="shrink-0 rounded-md bg-[#4c6b22]/70 px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap text-[#beee11]">
+        {game.price}
+      </span>
+    );
   }
   if (game.discountPct > 0) {
     return (
@@ -104,9 +131,22 @@ export function PriceTag({
       </span>
     );
   }
-  return <span className={clsx("shrink-0 rounded-md bg-white/6 font-semibold whitespace-nowrap text-ink-100", big ? "px-3 py-1 text-base" : "px-1.5 py-0.5 text-xs")}>{game.price}</span>;
+  return (
+    <span
+      className={clsx(
+        "shrink-0 rounded-md bg-white/6 font-semibold whitespace-nowrap text-ink-100",
+        big ? "px-3 py-1 text-base" : "px-1.5 py-0.5 text-xs",
+      )}
+    >
+      {game.price}
+    </span>
+  );
 }
 
 export function Pill({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={clsx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide", className)}>{children}</span>;
+  return (
+    <span className={clsx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide", className)}>
+      {children}
+    </span>
+  );
 }

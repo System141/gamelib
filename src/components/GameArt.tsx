@@ -50,7 +50,12 @@ function ArtInner({ game, className, eager }: { game: ArtGame; className?: strin
 
       {stage === "header" && header && (
         <>
-          <img src={header} alt="" aria-hidden className="absolute inset-0 size-full scale-125 object-cover opacity-50 blur-2xl saturate-150" />
+          <img
+            src={header}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 size-full scale-125 object-cover opacity-50 blur-2xl saturate-150"
+          />
           <div className="absolute inset-0 bg-gradient-to-b from-ink-950/40 via-transparent to-ink-950/60" />
           <img
             src={header}

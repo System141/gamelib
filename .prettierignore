@@ -1,0 +1,7 @@
+dist
+src-tauri
+crates
+target
+src/mocks/fixture.json
+pnpm-lock.yaml
+docs

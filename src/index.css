@@ -43,24 +43,48 @@
   --animate-progress: progress 1.2s ease-in-out infinite;
 
   @keyframes shimmer {
-    0% { background-position: -150% 0; }
-    100% { background-position: 250% 0; }
+    0% {
+      background-position: -150% 0;
+    }
+    100% {
+      background-position: 250% 0;
+    }
   }
   @keyframes fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
   @keyframes rise {
-    from { opacity: 0; transform: translateY(10px) scale(0.985); }
-    to { opacity: 1; transform: none; }
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
   @keyframes slide-in {
-    from { opacity: 0.4; transform: translateX(24px); }
-    to { opacity: 1; transform: none; }
+    from {
+      opacity: 0.4;
+      transform: translateX(24px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
   @keyframes progress {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(250%); }
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(250%);
+    }
   }
 }
 
@@ -137,8 +161,7 @@
 @utility app-backdrop {
   background:
     radial-gradient(1200px 520px at 12% -8%, rgb(102 192 244 / 0.13), transparent 60%),
-    radial-gradient(900px 480px at 92% -12%, rgb(167 139 250 / 0.12), transparent 62%),
-    var(--color-ink-900);
+    radial-gradient(900px 480px at 92% -12%, rgb(167 139 250 / 0.12), transparent 62%), var(--color-ink-900);
 }
 
 @utility glass {

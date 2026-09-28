@@ -95,6 +95,9 @@ export function fileKind(contentType: string | null | undefined, fileName?: stri
   if (ext && ext.length <= 5) return ext.toUpperCase();
   if (!contentType) return null;
   const sub = contentType.split("/")[1] ?? contentType;
-  const cleaned = sub.replace(/^x-/, "").replace(/^vnd\..*/, "").replace(/-compressed$/, "");
+  const cleaned = sub
+    .replace(/^x-/, "")
+    .replace(/^vnd\..*/, "")
+    .replace(/-compressed$/, "");
   return cleaned ? cleaned.toUpperCase().slice(0, 8) : null;
 }

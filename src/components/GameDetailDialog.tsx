@@ -120,10 +120,20 @@ function Detail({
         </div>
         <div className="flex min-w-0 flex-1 flex-col justify-end pb-1">
           <div className="flex flex-wrap items-center gap-2">
-            {isRecent(game.releaseDate, 7) && <span className="rounded-full bg-gradient-to-r from-accent to-violet px-2.5 py-0.5 text-[11px] font-bold text-ink-950">{tr.detail.new}</span>}
-            {game.isEarlyAccess && <span className="rounded-full bg-warning/15 px-2.5 py-0.5 text-[11px] font-semibold text-warning ring-1 ring-warning/30">{tr.detail.earlyAccess}</span>}
+            {isRecent(game.releaseDate, 7) && (
+              <span className="rounded-full bg-gradient-to-r from-accent to-violet px-2.5 py-0.5 text-[11px] font-bold text-ink-950">
+                {tr.detail.new}
+              </span>
+            )}
+            {game.isEarlyAccess && (
+              <span className="rounded-full bg-warning/15 px-2.5 py-0.5 text-[11px] font-semibold text-warning ring-1 ring-warning/30">
+                {tr.detail.earlyAccess}
+              </span>
+            )}
           </div>
-          <h2 className="mt-2 font-display text-[40px] leading-[1.05] font-semibold tracking-tight text-white drop-shadow-lg">{game.name}</h2>
+          <h2 className="mt-2 font-display text-[40px] leading-[1.05] font-semibold tracking-tight text-white drop-shadow-lg">
+            {game.name}
+          </h2>
           {(game.developers.length > 0 || game.publishers.length > 0) && (
             <p className="mt-2 truncate text-sm text-ink-300">{[...new Set([...game.developers, ...game.publishers])].join(" · ")}</p>
           )}
@@ -194,7 +204,9 @@ function Detail({
           <InfoRow label={tr.detail.platforms}>
             <span className="inline-flex items-center gap-2">
               <PlatformIcons game={game} size={14} className="text-ink-200" />
-              <span>{[game.win && tr.platforms.win, game.mac && tr.platforms.mac, game.linux && tr.platforms.linux].filter(Boolean).join(", ")}</span>
+              <span>
+                {[game.win && tr.platforms.win, game.mac && tr.platforms.mac, game.linux && tr.platforms.linux].filter(Boolean).join(", ")}
+              </span>
             </span>
           </InfoRow>
           {game.deck > 0 && (
@@ -247,7 +259,17 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Screenshots({ shots, loading, failed, onOpen }: { shots: Screenshot[]; loading: boolean; failed: boolean; onOpen: (i: number) => void }) {
+function Screenshots({
+  shots,
+  loading,
+  failed,
+  onOpen,
+}: {
+  shots: Screenshot[];
+  loading: boolean;
+  failed: boolean;
+  onOpen: (i: number) => void;
+}) {
   if (loading) {
     return (
       <div className="flex gap-3 overflow-hidden">
@@ -274,7 +296,13 @@ function Screenshots({ shots, loading, failed, onOpen }: { shots: Screenshot[]; 
           onClick={() => onOpen(i)}
           className="group relative aspect-video w-72 shrink-0 snap-start overflow-hidden rounded-xl bg-ink-800 ring-1 ring-white/8 transition hover:ring-accent/50"
         >
-          <img src={s.thumb} alt="" loading="lazy" decoding="async" className="size-full object-cover transition duration-500 group-hover:scale-105" />
+          <img
+            src={s.thumb}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="size-full object-cover transition duration-500 group-hover:scale-105"
+          />
         </button>
       ))}
     </div>
@@ -296,15 +324,37 @@ function Viewer({ shots, index, onChange }: { shots: Screenshot[]; index: number
   const shot = shots[index]!;
   return (
     <div className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-ink-950/95 p-10" onClick={() => onChange(null)}>
-      <img src={shot.full} alt="" className="max-h-full max-w-full rounded-lg shadow-2xl shadow-black" onClick={(e) => e.stopPropagation()} />
-      <button type="button" onClick={(e) => (e.stopPropagation(), go(-1))} className="glass absolute left-6 grid size-12 place-items-center rounded-full ring-1 ring-white/15 hover:ring-white/40" aria-label={tr.detail.viewerPrev}>
+      <img
+        src={shot.full}
+        alt=""
+        className="max-h-full max-w-full rounded-lg shadow-2xl shadow-black"
+        onClick={(e) => e.stopPropagation()}
+      />
+      <button
+        type="button"
+        onClick={(e) => (e.stopPropagation(), go(-1))}
+        className="glass absolute left-6 grid size-12 place-items-center rounded-full ring-1 ring-white/15 hover:ring-white/40"
+        aria-label={tr.detail.viewerPrev}
+      >
         <ChevronLeft size={22} />
       </button>
-      <button type="button" onClick={(e) => (e.stopPropagation(), go(1))} className="glass absolute right-6 grid size-12 place-items-center rounded-full ring-1 ring-white/15 hover:ring-white/40" aria-label={tr.detail.viewerNext}>
+      <button
+        type="button"
+        onClick={(e) => (e.stopPropagation(), go(1))}
+        className="glass absolute right-6 grid size-12 place-items-center rounded-full ring-1 ring-white/15 hover:ring-white/40"
+        aria-label={tr.detail.viewerNext}
+      >
         <ChevronRight size={22} />
       </button>
-      <div className="glass absolute bottom-6 rounded-full px-4 py-1.5 text-sm text-ink-200 ring-1 ring-white/10">{tr.detail.viewerCounter(index + 1, shots.length)}</div>
-      <button type="button" onClick={() => onChange(null)} className="glass absolute top-6 right-6 grid size-10 place-items-center rounded-full ring-1 ring-white/15 hover:ring-white/40" aria-label={tr.detail.close}>
+      <div className="glass absolute bottom-6 rounded-full px-4 py-1.5 text-sm text-ink-200 ring-1 ring-white/10">
+        {tr.detail.viewerCounter(index + 1, shots.length)}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        className="glass absolute top-6 right-6 grid size-10 place-items-center rounded-full ring-1 ring-white/15 hover:ring-white/40"
+        aria-label={tr.detail.close}
+      >
         <X size={18} />
       </button>
     </div>
@@ -331,4 +381,3 @@ function DetailSkeleton() {
     </div>
   );
 }
-

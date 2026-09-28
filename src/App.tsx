@@ -68,7 +68,13 @@ export function App() {
                 onOpen={openGame}
                 relativeDates={f.view === "new"}
                 onTotal={setTotal}
-                empty={<EmptyState view={f.view} canClear={f.activeCount > 0 || f.search.length > 0} onClear={() => (f.clear(), f.setSearch(""))} />}
+                empty={
+                  <EmptyState
+                    view={f.view}
+                    canClear={f.activeCount > 0 || f.search.length > 0}
+                    onClear={() => (f.clear(), f.setSearch(""))}
+                  />
+                }
               />
             </div>
           </>

@@ -19,8 +19,7 @@ export function useSyncEvents() {
     const unlisten: UnlistenFn[] = [];
     let lastRefresh = 0;
 
-    const keep = (p: Promise<UnlistenFn>) =>
-      p.then((fn) => (disposed ? fn() : unlisten.push(fn))).catch(() => undefined);
+    const keep = (p: Promise<UnlistenFn>) => p.then((fn) => (disposed ? fn() : unlisten.push(fn))).catch(() => undefined);
 
     keep(
       onSyncProgress((progress) => {

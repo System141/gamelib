@@ -11,7 +11,15 @@ import type { AppStatus } from "../lib/types";
 const STALE_AFTER_SECONDS = 7 * 86_400;
 
 /** Thin bar under the top bar: download progress, an interrupted download, or a stale catalog. */
-export function SyncBanner({ status, onResume, onRefresh }: { status: AppStatus | undefined; onResume: () => void; onRefresh: () => void }) {
+export function SyncBanner({
+  status,
+  onResume,
+  onRefresh,
+}: {
+  status: AppStatus | undefined;
+  onResume: () => void;
+  onRefresh: () => void;
+}) {
   const [dismissed, setDismissed] = useState<string | null>(null);
   if (!status) return null;
 
@@ -26,7 +34,9 @@ export function SyncBanner({ status, onResume, onRefresh }: { status: AppStatus 
           {p && p.total > 0 && <span className="tabular-nums">{tr.firstRun.progress(p.fetched, p.total)}</span>}
         </div>
         <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-700">
-          {pct != null && <div className="h-full bg-gradient-to-r from-accent to-violet transition-[width] duration-500" style={{ width: `${pct}%` }} />}
+          {pct != null && (
+            <div className="h-full bg-gradient-to-r from-accent to-violet transition-[width] duration-500" style={{ width: `${pct}%` }} />
+          )}
         </div>
       </div>
     );
@@ -56,7 +66,12 @@ export function SyncBanner({ status, onResume, onRefresh }: { status: AppStatus 
       <button type="button" onClick={onAction} className="font-semibold text-warning underline-offset-2 hover:underline">
         {action}
       </button>
-      <button type="button" onClick={() => setDismissed(kind)} className="ml-auto grid size-6 place-items-center rounded-md text-ink-400 hover:bg-white/8 hover:text-white" aria-label={tr.filters.close}>
+      <button
+        type="button"
+        onClick={() => setDismissed(kind)}
+        className="ml-auto grid size-6 place-items-center rounded-md text-ink-400 hover:bg-white/8 hover:text-white"
+        aria-label={tr.filters.close}
+      >
         <X size={13} />
       </button>
     </div>
@@ -75,13 +90,21 @@ export function Toasts() {
   return (
     <div className="pointer-events-none fixed right-6 bottom-6 z-[60] flex w-96 max-w-[90vw] flex-col gap-2" aria-live="polite">
       {toasts.map((t) => (
-        <div key={t.id} className="animate-rise pointer-events-auto flex items-start gap-3 rounded-xl bg-ink-750/95 p-4 shadow-2xl shadow-black/60 ring-1 ring-white/10 backdrop-blur">
+        <div
+          key={t.id}
+          className="animate-rise pointer-events-auto flex items-start gap-3 rounded-xl bg-ink-750/95 p-4 shadow-2xl shadow-black/60 ring-1 ring-white/10 backdrop-blur"
+        >
           <span className="mt-0.5">{TOAST_ICON[t.tone]}</span>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-ink-50">{t.title}</div>
             {t.description && <div className="mt-0.5 text-[13px] text-ink-300">{t.description}</div>}
           </div>
-          <button type="button" onClick={() => dismissToast(t.id)} className="grid size-6 place-items-center rounded-md text-ink-400 hover:bg-white/8 hover:text-white" aria-label={tr.filters.close}>
+          <button
+            type="button"
+            onClick={() => dismissToast(t.id)}
+            className="grid size-6 place-items-center rounded-md text-ink-400 hover:bg-white/8 hover:text-white"
+            aria-label={tr.filters.close}
+          >
             <X size={14} />
           </button>
         </div>
@@ -100,7 +123,11 @@ export function EmptyState({ view, canClear, onClear }: { view: "all" | "new" | 
       <h2 className="mt-5 font-display text-xl font-semibold text-ink-50">{links ? tr.linksView.emptyTitle : tr.empty.title}</h2>
       <p className="mt-2 text-sm text-ink-400">{links ? tr.linksView.emptyText : tr.empty.text}</p>
       {canClear && (
-        <button type="button" onClick={onClear} className={clsx("mt-5 h-9 rounded-lg bg-white/6 px-4 text-sm font-medium text-ink-100 ring-1 ring-white/10 hover:bg-white/10")}>
+        <button
+          type="button"
+          onClick={onClear}
+          className={clsx("mt-5 h-9 rounded-lg bg-white/6 px-4 text-sm font-medium text-ink-100 ring-1 ring-white/10 hover:bg-white/10")}
+        >
           {tr.empty.clear}
         </button>
       )}
@@ -126,7 +153,11 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink-50">{tr.error.title}</h1>
           <p className="mt-2 font-mono text-sm text-ink-400">{this.state.error.message}</p>
-          <button type="button" onClick={() => window.location.reload()} className="mt-6 h-10 rounded-lg bg-accent px-5 text-sm font-semibold text-ink-950">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-6 h-10 rounded-lg bg-accent px-5 text-sm font-semibold text-ink-950"
+          >
             {tr.error.reload}
           </button>
         </div>
@@ -134,4 +165,3 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
     );
   }
 }
-

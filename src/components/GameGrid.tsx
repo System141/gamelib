@@ -26,8 +26,11 @@ export function GameGrid({ query, tagName, onOpen, relativeDates = false, empty,
   const scrollRef = useRef<HTMLDivElement>(null);
   const width = useElementWidth(scrollRef);
   const layout = computeGridLayout(width || 1200);
-  const [range, setRange] = useState<PageRange>({ first: 0, last: 0 });
-  const { total, getItem, key, error } = useGameWindow(query, range);
+  // The visible page range belongs to one query; a new query starts at the top.
+  const queryKey = JSON.stringify(query);
+  const [range, setRange] = useState<PageRange & { key: string }>({ key: queryKey, first: 0, last: 0 });
+  const current = range.key === queryKey ? range : { key: queryKey, first: 0, last: 0 };
+  const { total, getItem, key, error } = useGameWindow(query, current);
 
   useEffect(() => onTotal?.(total), [total, onTotal]);
 
@@ -59,8 +62,8 @@ export function GameGrid({ query, tagName, onOpen, relativeDates = false, empty,
   const first = Math.min(Math.floor(firstIndex / PAGE_SIZE), maxPage);
   const last = Math.min(Math.floor(lastIndex / PAGE_SIZE), maxPage);
   useEffect(() => {
-    setRange((r) => (r.first === first && r.last === last ? r : { first, last }));
-  }, [first, last]);
+    setRange((r) => (r.key === queryKey && r.first === first && r.last === last ? r : { key: queryKey, first, last }));
+  }, [queryKey, first, last]);
 
   const [showTop, setShowTop] = useState(false);
   const onScroll = useCallback(() => setShowTop((scrollRef.current?.scrollTop ?? 0) > 1600), []);

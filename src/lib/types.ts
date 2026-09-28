@@ -127,17 +127,7 @@ export interface NewReleasesReport {
 }
 
 export type ErrorKind =
-  | "network"
-  | "timeout"
-  | "rate_limited"
-  | "http"
-  | "parse"
-  | "database"
-  | "cancelled"
-  | "invalid"
-  | "not_found"
-  | "busy"
-  | "other";
+  "network" | "timeout" | "rate_limited" | "http" | "parse" | "database" | "cancelled" | "invalid" | "not_found" | "busy" | "other";
 
 export interface CmdError {
   kind: ErrorKind;
@@ -167,15 +157,7 @@ export interface AppStatus {
 
 export type LinkKind = "download" | "page";
 
-export type CheckStatus =
-  | "ok"
-  | "broken"
-  | "loop"
-  | "too_many_redirects"
-  | "timeout"
-  | "network"
-  | "tls"
-  | "unsupported_scheme";
+export type CheckStatus = "ok" | "broken" | "loop" | "too_many_redirects" | "timeout" | "network" | "tls" | "unsupported_scheme";
 
 export interface SiteInfo {
   id: string;

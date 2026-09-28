@@ -55,7 +55,21 @@ export function FirstRun({ status, onFullSync, onNewReleases, onCancel }: Props)
   );
 }
 
-function Choice({ icon, title, desc, cta, primary = false, onClick }: { icon: ReactNode; title: string; desc: string; cta: string; primary?: boolean; onClick: () => void }) {
+function Choice({
+  icon,
+  title,
+  desc,
+  cta,
+  primary = false,
+  onClick,
+}: {
+  icon: ReactNode;
+  title: string;
+  desc: string;
+  cta: string;
+  primary?: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
@@ -96,14 +110,21 @@ function Progress({ status, onCancel }: { status: AppStatus; onCancel: () => voi
           <LoaderCircle size={20} className="animate-spin text-accent" />
           <span className="font-medium text-ink-50">{tr.sync.phases[p?.phase ?? "starting"]}</span>
         </div>
-        <button type="button" onClick={onCancel} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm text-ink-300 ring-1 ring-white/10 hover:bg-white/6 hover:text-white">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm text-ink-300 ring-1 ring-white/10 hover:bg-white/6 hover:text-white"
+        >
           <X size={14} />
           {tr.firstRun.cancel}
         </button>
       </div>
       <div className="relative mt-5 h-2.5 overflow-hidden rounded-full bg-ink-700">
         {pct != null ? (
-          <div className="h-full rounded-full bg-gradient-to-r from-accent to-violet transition-[width] duration-500" style={{ width: `${Math.max(2, pct)}%` }} />
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-accent to-violet transition-[width] duration-500"
+            style={{ width: `${Math.max(2, pct)}%` }}
+          />
         ) : (
           <div className="animate-progress absolute inset-y-0 w-1/3 rounded-full bg-gradient-to-r from-transparent via-accent to-transparent" />
         )}

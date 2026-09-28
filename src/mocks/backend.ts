@@ -230,7 +230,14 @@ export class MockBackend {
         return;
       }
       byPopularity.slice(0, Math.round((byPopularity.length * i) / steps)).forEach((g) => this.present.add(g.appid));
-      this.report({ ...base, phase: "catalog", fetched: Math.round((total * i) / steps), total, page: Math.round((pages * i) / steps), pages });
+      this.report({
+        ...base,
+        phase: "catalog",
+        fetched: Math.round((total * i) / steps),
+        total,
+        page: Math.round((pages * i) / steps),
+        pages,
+      });
     }
     this.report({ ...base, phase: "finalizing", fetched: total, total, page: pages, pages });
     await sleep(500);
@@ -346,11 +353,13 @@ export class MockBackend {
       httpStatus: broken ? 404 : 200,
       finalUrl: `${url.protocol}//${finalHost}${url.pathname}`,
       finalHost,
-      hops: broken ? [{ url: link.url, status: 404 }] : [
-        { url: link.url, status: 302 },
-        { url: `https://${url.hostname}/r${url.pathname}`, status: 302 },
-        { url: `https://${finalHost}${url.pathname}`, status: 200 },
-      ],
+      hops: broken
+        ? [{ url: link.url, status: 404 }]
+        : [
+            { url: link.url, status: 302 },
+            { url: `https://${url.hostname}/r${url.pathname}`, status: 302 },
+            { url: `https://${finalHost}${url.pathname}`, status: 200 },
+          ],
       fileName: isFile && !broken ? decodeURIComponent(last) : null,
       sizeBytes: isFile && !broken ? 1_288_490_189 : null,
       contentType: isFile ? "application/zip" : "text/html",

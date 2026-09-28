@@ -38,7 +38,9 @@ export const GameCard = memo(function GameCard({ game, tagName, onOpen, relative
         <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-1 p-2">
           <div className="flex flex-wrap gap-1">
             {fresh && <Pill className="bg-gradient-to-r from-accent to-violet text-ink-950 shadow-md shadow-black/40">{tr.card.new}</Pill>}
-            {game.isEarlyAccess && <Pill className="bg-ink-950/75 text-warning ring-1 ring-warning/30 backdrop-blur">{tr.card.earlyAccess}</Pill>}
+            {game.isEarlyAccess && (
+              <Pill className="bg-ink-950/75 text-warning ring-1 ring-warning/30 backdrop-blur">{tr.card.earlyAccess}</Pill>
+            )}
           </div>
           {game.discountPct > 0 && <Pill className="bg-[#4c6b22] text-[#beee11] shadow-md shadow-black/40">-%{game.discountPct}</Pill>}
         </div>
@@ -68,7 +70,10 @@ export const GameCard = memo(function GameCard({ game, tagName, onOpen, relative
       </div>
 
       <div className="mt-2.5 min-w-0 px-0.5">
-        <div className="truncate text-[13.5px] leading-5 font-semibold text-ink-50 transition-colors group-hover:text-white" title={game.name}>
+        <div
+          className="truncate text-[13.5px] leading-5 font-semibold text-ink-50 transition-colors group-hover:text-white"
+          title={game.name}
+        >
           {game.name}
         </div>
         <div className="mt-1 flex h-5 items-center justify-between gap-2 text-xs text-ink-300">

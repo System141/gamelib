@@ -45,17 +45,23 @@ export function TopBar({ f, status, catalogEmpty, onOpenFilters, onFullSync, onN
           <>
             <SortMenu value={f.sort} searching={f.searching} onChange={f.setSort} />
             <button
-          type="button"
-          onClick={onOpenFilters}
-          title={tr.filters.button}
-          className={clsx(
-            "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium ring-1 transition",
-            f.activeCount > 0 ? "bg-accent/12 text-accent-soft ring-accent/35 hover:bg-accent/18" : "bg-white/4 text-ink-200 ring-white/8 hover:bg-white/8 hover:text-ink-50",
-          )}
-        >
-          <SlidersHorizontal size={15} />
-          <span className="hidden xl:inline">{tr.filters.button}</span>
-          {f.activeCount > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[11px] font-bold text-ink-950">{f.activeCount}</span>}
+              type="button"
+              onClick={onOpenFilters}
+              title={tr.filters.button}
+              className={clsx(
+                "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium ring-1 transition",
+                f.activeCount > 0
+                  ? "bg-accent/12 text-accent-soft ring-accent/35 hover:bg-accent/18"
+                  : "bg-white/4 text-ink-200 ring-white/8 hover:bg-white/8 hover:text-ink-50",
+              )}
+            >
+              <SlidersHorizontal size={15} />
+              <span className="hidden xl:inline">{tr.filters.button}</span>
+              {f.activeCount > 0 && (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[11px] font-bold text-ink-950">
+                  {f.activeCount}
+                </span>
+              )}
             </button>
           </>
         )}
@@ -86,7 +92,9 @@ function ViewTabs({ view, onChange, linked }: { view: View; onChange: (v: View) 
         >
           {t.id === "new" && <Sparkles size={13} className={view === t.id ? "text-violet" : undefined} />}
           {t.label}
-          {t.badge != null && <span className="rounded-full bg-accent/20 px-1.5 text-[11px] font-semibold text-accent-soft">{formatNumber(t.badge)}</span>}
+          {t.badge != null && (
+            <span className="rounded-full bg-accent/20 px-1.5 text-[11px] font-semibold text-accent-soft">{formatNumber(t.badge)}</span>
+          )}
         </button>
       ))}
     </nav>
@@ -98,7 +106,8 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
+      const typing =
+        e.target instanceof HTMLElement && (e.target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName));
       if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") || (e.key === "/" && !typing)) {
         e.preventDefault();
         input.current?.focus();
@@ -128,11 +137,18 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
         aria-label={tr.search.placeholder}
       />
       {value ? (
-        <button type="button" onClick={() => onChange("")} className="absolute right-2 grid size-7 place-items-center rounded-lg text-ink-400 hover:bg-white/8 hover:text-ink-50" aria-label={tr.search.clear}>
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="absolute right-2 grid size-7 place-items-center rounded-lg text-ink-400 hover:bg-white/8 hover:text-ink-50"
+          aria-label={tr.search.clear}
+        >
           <X size={15} />
         </button>
       ) : (
-        <kbd className="pointer-events-none absolute right-3 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-sans text-[11px] text-ink-400">Ctrl K</kbd>
+        <kbd className="pointer-events-none absolute right-3 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-sans text-[11px] text-ink-400">
+          Ctrl K
+        </kbd>
       )}
     </label>
   );
@@ -160,7 +176,10 @@ function SortMenu({ value, searching, onChange }: { value: SortKey; searching: b
         <ChevronDown size={14} className={clsx("text-ink-400 transition", open && "rotate-180")} />
       </button>
       {open && (
-        <ul role="listbox" className="animate-rise absolute right-0 z-40 mt-2 w-52 overflow-hidden rounded-xl bg-ink-800 p-1 shadow-2xl shadow-black/60 ring-1 ring-white/10">
+        <ul
+          role="listbox"
+          className="animate-rise absolute right-0 z-40 mt-2 w-52 overflow-hidden rounded-xl bg-ink-800 p-1 shadow-2xl shadow-black/60 ring-1 ring-white/10"
+        >
           <li className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-wider text-ink-400 uppercase">{tr.sort.label}</li>
           {options.map((o) => (
             <li key={o}>
@@ -188,7 +207,17 @@ function SortMenu({ value, searching, onChange }: { value: SortKey; searching: b
   );
 }
 
-function SyncButton({ status, onFullSync, onNewReleases, onCancel }: { status: AppStatus | undefined; onFullSync: () => void; onNewReleases: () => void; onCancel: () => void }) {
+function SyncButton({
+  status,
+  onFullSync,
+  onNewReleases,
+  onCancel,
+}: {
+  status: AppStatus | undefined;
+  onFullSync: () => void;
+  onNewReleases: () => void;
+  onCancel: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -199,12 +228,20 @@ function SyncButton({ status, onFullSync, onNewReleases, onCancel }: { status: A
     const pct = progress && progress.total > 0 ? Math.round((progress.fetched / progress.total) * 100) : null;
     return (
       <div className="relative inline-flex h-9 items-center gap-2 overflow-hidden rounded-lg bg-accent/10 pr-1 pl-3 text-sm text-accent-soft ring-1 ring-accent/30">
-        {pct != null && <span className="absolute inset-y-0 left-0 bg-accent/15 transition-[width] duration-500" style={{ width: `${pct}%` }} />}
+        {pct != null && (
+          <span className="absolute inset-y-0 left-0 bg-accent/15 transition-[width] duration-500" style={{ width: `${pct}%` }} />
+        )}
         <LoaderCircle size={15} className="relative animate-spin" />
         <span className="relative font-medium whitespace-nowrap tabular-nums">
           {status.worker === "new_releases" ? tr.views.new : pct != null ? `%${pct}` : tr.sync.phases[progress?.phase ?? "starting"]}
         </span>
-        <button type="button" onClick={onCancel} className="relative grid size-7 place-items-center rounded-md text-accent-soft/80 hover:bg-white/10 hover:text-white" aria-label={tr.sync.cancel} title={tr.sync.cancel}>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="relative grid size-7 place-items-center rounded-md text-accent-soft/80 hover:bg-white/10 hover:text-white"
+          aria-label={tr.sync.cancel}
+          title={tr.sync.cancel}
+        >
           <X size={14} />
         </button>
       </div>
@@ -225,7 +262,10 @@ function SyncButton({ status, onFullSync, onNewReleases, onCancel }: { status: A
         <ChevronDown size={14} className={clsx("transition", open && "rotate-180")} />
       </button>
       {open && (
-        <div role="menu" className="animate-rise absolute right-0 z-40 mt-2 w-80 rounded-xl bg-ink-800 p-1.5 shadow-2xl shadow-black/60 ring-1 ring-white/10">
+        <div
+          role="menu"
+          className="animate-rise absolute right-0 z-40 mt-2 w-80 rounded-xl bg-ink-800 p-1.5 shadow-2xl shadow-black/60 ring-1 ring-white/10"
+        >
           <MenuItem
             icon={<Sparkles size={17} className="text-violet" />}
             title={tr.sync.newReleases}
@@ -252,7 +292,12 @@ function SyncButton({ status, onFullSync, onNewReleases, onCancel }: { status: A
 
 function MenuItem({ icon, title, hint, onClick }: { icon: ReactNode; title: string; hint: string; onClick: () => void }) {
   return (
-    <button type="button" role="menuitem" onClick={onClick} className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white/6">
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white/6"
+    >
       <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-white/5 ring-1 ring-white/8">{icon}</span>
       <span className="min-w-0">
         <span className="block text-sm font-medium text-ink-50">{title}</span>
