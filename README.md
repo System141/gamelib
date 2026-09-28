@@ -8,6 +8,23 @@ Steam'deki **tüm çıkmış oyunları** kapak görselleriyle birlikte bilgisaya
 | --- | --- |
 | ![Detay](docs/screenshots/detail.jpg) | ![Yeni çıkanlar](docs/screenshots/new-releases.jpg) |
 
+## Kurulum (hazır paket)
+
+Rust ya da Node kurmana gerek yok: kurulum dosyaları GitHub Actions'ta derlenir.
+
+1. GitHub'da depoyu aç: **Actions → Build → Run workflow**. Sistem olarak `windows`'u (ya da `all`, `macos`, `linux`) seç ve başlat.
+2. Derleme yaklaşık 15–20 dakika sürer. Bitince çalıştırmayı aç ve sayfanın altındaki **Artifacts** bölümünden paketi indir. Örneğin `gamelib-windows` şunları içerir:
+   - `GameLib_0.1.0_x64-setup.exe`: masaüstü uygulamasının kurulumu.
+   - `gamelib-cli-windows-x64.exe`: komut satırı aracı (tarayıcı önizlemesi için, aşağıya bak).
+3. Kurulumu çalıştır. Paket imzasız olduğu için Windows "Windows bilgisayarınızı korudu" uyarısı gösterebilir: **Ek bilgi → Yine de çalıştır**.
+
+Diğer sistemler:
+
+- **macOS** (`gamelib-macos`): `.dmg` dosyasını açıp GameLib'i Uygulamalar klasörüne sürükle. İlk açılışta uyarı çıkarsa **Sistem Ayarları → Gizlilik ve Güvenlik → Yine de Aç**.
+- **Linux** (`gamelib-linux`): `.deb` ya da `.rpm` paketini kur, ya da `.AppImage` dosyasını `chmod +x` ile çalıştırılabilir yapıp aç.
+
+Artifacts 7 gün saklanır. `v` ile başlayan bir sürüm etiketi (ör. `v0.1.0`) gönderildiğinde dosyalar kalıcı olarak bir GitHub Release'e de eklenir.
+
 ## Özellikler
 
 - **Tüm katalog:** Steam'deki ~130.600 çıkmış oyun, dikey kapak görselleriyle. Katalog yerel veritabanında durduğu için arama ve filtreler anında çalışır.
@@ -48,6 +65,8 @@ Steam'deki **tüm çıkmış oyunları** kapak görselleriyle birlikte bilgisaya
 
 ## Gereksinimler
 
+Yalnızca kaynak koddan derlemek ya da geliştirmek için gerekir; hazır paketler için bkz. [Kurulum](#kurulum-hazır-paket).
+
 - Node.js 22.12+ ve pnpm 10
 - Rust 1.90+
 - İşletim sistemine göre:
@@ -64,16 +83,26 @@ pnpm install
 pnpm tauri dev          # uygulamayı geliştirme modunda açar
 ```
 
-**Tarayıcı önizlemesi:** `pnpm dev` komutundan sonra http://localhost:1420 adresini aç.
+**Tarayıcı önizlemesi:** `pnpm dev` komutundan sonra http://localhost:1420 adresini aç. Önizleme Tauri olmadan çalışır; verinin nereden geldiğini sol alttaki rozet gösterir:
 
-- Tauri olmadan, gerçek katalogdan alınmış 272 oyunluk örnek veriyle çalışır.
-- `?mock=empty` ile ilk açılış ekranı görülebilir.
-- Örnek veriyi yenilemek için önce CLI ile bir katalog indir, sonra `pnpm fixture` çalıştır.
+- **Yerel katalog:** Başka bir terminalde `gamelib-cli serve` çalışıyorsa (kaynak koddan: `pnpm serve`) önizleme masaüstü uygulamasının veritabanındaki gerçek kataloğu gösterir. Arama, detay, bağlantılar ve güncellemeler bu sunucu üzerinden çalışır. Katalog henüz boşsa "Kataloğu indir" ile tarayıcıdan da indirebilirsin.
+- **Örnek veri:** Sunucu çalışmıyorsa gerçek katalogdan alınmış 272 oyunluk örnek veri kullanılır. Sunucuyu başlatıp sayfayı yenilemen yeterli.
+- `?mock` her zaman örnek veriyi, `?mock=empty` ilk açılış ekranını açar.
+- Örnek veriyi yenilemek için önce bir katalog indir, sonra `pnpm fixture` çalıştır.
+
+Windows'ta Rust kurmadan gerçek kataloğu tarayıcıda görmek için hazır paketteki `gamelib-cli-windows-x64.exe` dosyasını kullan:
+
+```powershell
+.\gamelib-cli-windows-x64.exe serve   # 1. terminal: yerel sunucu
+pnpm dev                              # 2. terminal: önizleme, ardından http://localhost:1420
+```
+
+Sunucu yalnızca `127.0.0.1` adresini dinler ve yalnızca bu bilgisayardaki sayfalardan gelen istekleri kabul eder. Durdurmak için Ctrl+C.
 
 Testler ve kontroller:
 
 ```bash
-cargo test                                  # çekirdek (GTK gerektirmez)
+cargo test                                  # çekirdek ve CLI (GTK gerektirmez)
 cargo test -p gamelib-core -- --ignored     # gerçek Steam API'siyle canlı test
 pnpm test                                   # arayüz yardımcıları
 cargo clippy --workspace --all-targets -- -D warnings
@@ -86,19 +115,22 @@ cargo fmt --all
 pnpm tauri build        # işletim sistemine uygun kurulum paketlerini üretir
 ```
 
+Aynı derleme `.github/workflows/build.yml` ile GitHub Actions'ta da yapılır (bkz. [Kurulum](#kurulum-hazır-paket)). Her push'ta biçim, lint ve testler çalışır; kurulum paketleri yalnızca elle başlatılan çalıştırmalarda ve sürüm etiketlerinde üretilir.
+
 ## Komut satırı aracı
 
-`gamelib-cli`, katalogla arayüz olmadan çalışmayı sağlar:
+`gamelib-cli`, katalogla arayüz olmadan çalışmayı sağlar. Hazır paketteki dosyayı doğrudan, kaynak koddan ise `cargo run --release -p gamelib-cli --` ile çalıştırabilirsin:
 
 ```bash
-cargo run --release -p gamelib-core --bin gamelib-cli -- --db gamelib.db sync
-cargo run --release -p gamelib-core --bin gamelib-cli -- --db gamelib.db new-releases
-cargo run --release -p gamelib-core --bin gamelib-cli -- --db gamelib.db query --search "witcher" --limit 5
-cargo run --release -p gamelib-core --bin gamelib-cli -- --db gamelib.db stats
-cargo run --release -p gamelib-core --bin gamelib-cli -- check-link https://ornek.com/dosya.zip
+gamelib-cli serve                                    # tarayıcı önizlemesine gerçek kataloğu sunar
+gamelib-cli sync                                     # tüm kataloğu indirir
+gamelib-cli new-releases                             # yeni çıkanları getirir
+gamelib-cli query --search "witcher" --limit 5
+gamelib-cli stats
+gamelib-cli check-link https://ornek.com/dosya.zip   # yönlendirmeleri izler, indirmez
 ```
 
-Tüm komutlar için `help` alt komutuna bak. Uygulamanın kendi veritabanını kullanmak için `--db` ile aşağıdaki yolu ver.
+Varsayılan olarak masaüstü uygulamasının veritabanını kullanır (bkz. [Veri konumu](#veri-konumu)), böylece ikisi aynı kataloğu görür. Başka bir dosya için `--db PATH` ver. Masaüstü uygulaması ve CLI aynı anda katalog indirmeye çalışırsa ikincisi "zaten bir güncelleme sürüyor" yanıtı alır. Tüm komutlar için `help` alt komutuna bak.
 
 ## Veri konumu
 
@@ -108,20 +140,23 @@ Tüm komutlar için `help` alt komutuna bak. Uygulamanın kendi veritabanını k
 | macOS | `~/Library/Application Support/com.gamelib.desktop/gamelib.db` |
 | Linux | `~/.local/share/com.gamelib.desktop/gamelib.db` |
 
-Kataloğu sıfırlamak için uygulama kapalıyken bu dosyayı silmen yeterli. Dosya silinince eklediğin bağlantılar da silinir.
+`gamelib-cli` de varsayılan olarak bu dosyayı kullanır. Kataloğu sıfırlamak için uygulama kapalıyken bu dosyayı silmen yeterli. Dosya silinince eklediğin bağlantılar da silinir.
 
 ## Proje yapısı
 
 ```
-crates/gamelib-core/   Tauri'den bağımsız çekirdek: Steam istemcisi, SQLite, senkron, bağlantılar, CLI
+crates/gamelib-core/   Tauri'den bağımsız çekirdek: Steam istemcisi, SQLite, senkron, bağlantılar
+  src/app.rs           arayüz komutları ve arka plan işleri (masaüstü ve CLI sunucusu ortak kullanır)
   src/steam/           Steam servisleri ve görsel adresleri
   src/db/              şema, okuma/yazma, bağlantı kayıtları
   src/sync.rs          tam katalog indirme
   src/new_releases.rs  yeni çıkanları getirme
   src/links/           URL doğrulama, site işleyicileri, yönlendirme kontrolü
+crates/gamelib-cli/    komut satırı aracı ve tarayıcı önizlemesi için yerel sunucu (src/serve.rs)
 src-tauri/             masaüstü kabuğu: komutlar, olaylar, pencere ve güvenlik ayarları
 src/                   React arayüzü (tüm metinler src/i18n/tr.ts içinde)
-  mocks/               yalnızca tarayıcı önizlemesi için sahte arka uç
+  mocks/               yalnızca tarayıcı önizlemesi için: yerel sunucu köprüsü ve örnek veri
+.github/workflows/     kontroller ve kurulum paketleri
 ```
 
 ## Yeni site işleyicisi ekleme
