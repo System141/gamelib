@@ -175,7 +175,8 @@ export function StorePill({ store, className }: { store: Store; className?: stri
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wide uppercase ring-1 backdrop-blur",
+        // No `uppercase`: with lang="tr" it would turn "itch.io" into "İTCH.IO".
+        "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wide ring-1 backdrop-blur",
         store === "gog" ? "bg-ink-950/80 text-gog ring-gog/40" : "bg-ink-950/80 text-itch ring-itch/40",
         className,
       )}

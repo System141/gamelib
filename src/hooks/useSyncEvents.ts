@@ -37,7 +37,7 @@ export function useSyncEvents() {
     keep(
       onSyncFinished((finished) => {
         qc.setQueryData<AppStatus>(["status"], (s) => (s ? { ...s, worker: null, progress: null } : s));
-        for (const key of ["games", "status", "tags", "game", "stores"]) {
+        for (const key of ["games", "status", "tags", "game", "stores", "library", "accounts"]) {
           void qc.invalidateQueries({ queryKey: [key] });
         }
         announce(finished);
@@ -72,6 +72,18 @@ function announce(f: SyncFinished) {
     const description =
       r.warnings.length > 0 ? tr.sync.toastStoresWarning : r.remaining > 0 ? tr.sync.toastStoresRemaining(r.remaining) : undefined;
     showToast({ tone: "success", title: tr.sync.toastStores(r.matchedGames), description });
+  }
+  const library = f.library ?? f.stores?.library;
+  if (library) {
+    if (f.library) {
+      const owned = (library.gogOwned ?? 0) + (library.itchOwned ?? 0);
+      showToast({
+        tone: library.warnings.length > 0 ? "warning" : "success",
+        title: tr.sync.toastLibrary(owned),
+        description: library.warnings.length > 0 ? tr.sync.toastLibraryWarning : undefined,
+      });
+    }
+    if (library.gogSignedOut) showToast({ tone: "warning", title: tr.sync.toastGogSignedOut }, 9000);
   }
   if (f.newReleases) {
     const r = f.newReleases;

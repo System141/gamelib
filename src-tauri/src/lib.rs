@@ -46,6 +46,7 @@ pub fn run() {
             commands::link_store_product,
             commands::get_accounts,
             commands::gog_login_url,
+            commands::open_gog_login_page,
             commands::gog_login,
             commands::gog_login_with_code,
             commands::itch_set_key,

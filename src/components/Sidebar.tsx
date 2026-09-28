@@ -1,7 +1,7 @@
 // Left navigation: catalog views and stores. Collapses to icons on narrower windows.
 
 import clsx from "clsx";
-import { LayoutGrid, Link2, Sparkles } from "lucide-react";
+import { LayoutGrid, Library, Link2, Settings, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { tr } from "../i18n/tr";
 import { formatNumber } from "../lib/format";
@@ -41,7 +41,12 @@ export function Sidebar({ view, onChange, status }: Props) {
         { id: "itch", label: tr.storeNames.itch, icon: <StoreMark store="itch" size={19} />, count: counts?.itch || undefined },
       ],
     },
+    {
+      title: tr.nav.library,
+      items: [{ id: "library", label: tr.views.library, icon: <Library size={17} />, count: counts?.owned || undefined }],
+    },
   ];
+  const settings: Item = { id: "settings", label: tr.views.settings, icon: <Settings size={17} /> };
 
   return (
     <aside className="glass relative z-30 flex w-16 shrink-0 flex-col border-r border-white/6 xl:w-60" aria-label={tr.nav.label}>
@@ -68,6 +73,9 @@ export function Sidebar({ view, onChange, status }: Props) {
           </div>
         ))}
       </nav>
+      <div className="shrink-0 border-t border-white/6 px-2 py-3 xl:px-3">
+        <NavItem item={settings} active={view === "settings"} onClick={() => onChange("settings")} />
+      </div>
     </aside>
   );
 }

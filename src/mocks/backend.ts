@@ -5,6 +5,7 @@
 import { fold, normalizeName } from "../lib/fold";
 import { nowSeconds } from "../lib/format";
 import type {
+  Accounts,
   AppStatus,
   CmdError,
   GameCard,
@@ -13,12 +14,15 @@ import type {
   GameMedia,
   GamePage,
   GameQuery,
+  LibraryItem,
   LinkCheck,
   LinkInput,
   MatchState,
+  Settings,
   SiteInfo,
   Store,
   StoreMatch,
+  StoreSearchHit,
   SyncFinished,
   SyncProgress,
   TagInfo,
@@ -58,6 +62,11 @@ export class MockBackend {
   private allMatches = new Map<number, StoreMatch[]>();
   private matches = new Map<number, StoreMatch[]>();
   private lastStoreSyncAt: number | null = null;
+  private accounts: Accounts = { gog: null, itch: null };
+  /** Owned products as `store:productId`. */
+  private owned = new Set<string>();
+  private itchLibrary: LibraryItem[] = [];
+  private settings: Settings = { libraryDir: "C:\\Users\\oyuncu\\Games", keepInstallers: false, autoUpdate: true };
 
   constructor(
     private fixture: Fixture,
@@ -123,8 +132,45 @@ export class MockBackend {
       case "set_match_state":
         return this.setMatchState(args.store, args.productId, args.appid, args.state);
       case "open_store_page":
+      case "open_account_page":
+      case "open_gog_login_page":
         console.info(`[mock] ${cmd}`, args);
         return null;
+      case "search_store":
+        await sleep(600);
+        return this.searchStore(args.appid);
+      case "link_store_product":
+        return this.linkStoreProduct(args.store, args.productId, args.appid);
+      case "get_accounts":
+        return this.accounts;
+      case "gog_login_url":
+        return "https://auth.gog.com/auth?client_id=46899977096215655";
+      case "gog_login":
+        await sleep(1500);
+        return this.signIn("gog", "oyuncu");
+      case "gog_login_with_code":
+        if (!String(args.redirect).includes("code=")) throw invalid("gog_code");
+        return this.signIn("gog", "oyuncu");
+      case "itch_set_key":
+        await sleep(500);
+        if (String(args.key).trim().length < 8) throw invalid("itch_key");
+        return this.signIn("itch", "Oyuncu");
+      case "sign_out":
+        return this.signOut(args.store);
+      case "start_library_sync":
+        return this.startWorker("library");
+      case "get_library":
+        return this.library();
+      case "get_settings":
+        return this.settings;
+      case "update_settings":
+        if (args.patch.libraryDir != null && !/^([a-z]:\\|\/)/i.test(args.patch.libraryDir)) throw invalid("library_dir");
+        this.settings = { ...this.settings, ...args.patch };
+        return this.settings;
+      case "pick_library_dir":
+        await sleep(300);
+        this.settings = { ...this.settings, libraryDir: "D:\\Oyunlar" };
+        return this.settings;
       case "list_sites":
         return SITES;
       case "list_links":
@@ -163,8 +209,137 @@ export class MockBackend {
   private storeMatches(appid: number): StoreMatch[] {
     return (this.matches.get(appid) ?? [])
       .filter((m) => m.state !== "rejected")
-      .map((m) => ({ ...m, confident: isConfident(m) }))
+      .map((m) => ({ ...m, confident: isConfident(m), owned: this.owned.has(`${m.store}:${m.productId}`) }))
       .sort((a, b) => a.store.localeCompare(b.store) || Number(b.confident) - Number(a.confident) || b.score - a.score);
+  }
+
+  private signIn(store: Store, username: string): Accounts {
+    this.accounts = { ...this.accounts, [store]: { username } };
+    void this.startWorker("library").catch(() => undefined);
+    return this.accounts;
+  }
+
+  private signOut(store: Store): Accounts {
+    this.accounts = { ...this.accounts, [store]: null };
+    for (const key of [...this.owned]) if (key.startsWith(`${store}:`)) this.owned.delete(key);
+    if (store === "itch") this.itchLibrary = [];
+    return this.accounts;
+  }
+
+  /** Signed-in accounts "own" a few of the games that have store matches. */
+  private readLibrary(): number {
+    if (this.accounts.gog) {
+      const gog = this.visible()
+        .sort((a, b) => b.reviewCount - a.reviewCount)
+        .flatMap((g) => (this.matches.get(g.appid) ?? []).filter((m) => m.store === "gog" && isConfident(m)))
+        .slice(0, 9);
+      for (const m of gog) this.owned.add(`gog:${m.productId}`);
+    }
+    if (this.accounts.itch) {
+      const [a, b] = this.visible().filter((g) => g.isFree || g.reviewCount < 50_000);
+      this.itchLibrary = [
+        ...[a, b].filter(Boolean).map((g) => ({
+          store: "itch" as const,
+          productId: String(9_000_000 + g!.appid),
+          title: g!.name,
+          url: "https://itch.io",
+          cover: null,
+          coverWide: g!.header,
+          win: true,
+          mac: false,
+          linux: false,
+          appid: g!.appid,
+          steamHeader: g!.header,
+          steamCapsule: g!.capsule,
+        })),
+        {
+          store: "itch",
+          productId: "9999001",
+          title: "Obscure Jam Game",
+          url: "https://itch.io",
+          cover: null,
+          coverWide: null,
+          win: true,
+          mac: true,
+          linux: true,
+          appid: null,
+          steamHeader: null,
+          steamCapsule: null,
+        },
+      ];
+      for (const i of this.itchLibrary) this.owned.add(`itch:${i.productId}`);
+    }
+    return this.library().length;
+  }
+
+  private library(): LibraryItem[] {
+    const gog: LibraryItem[] = [];
+    for (const [appid, list] of this.matches) {
+      const g = this.all.find((x) => x.appid === appid);
+      for (const m of list) {
+        if (m.store !== "gog" || !this.owned.has(`gog:${m.productId}`) || !g) continue;
+        gog.push({
+          store: "gog",
+          productId: m.productId,
+          title: m.title,
+          url: m.url,
+          cover: m.cover,
+          coverWide: m.coverWide,
+          win: m.win,
+          mac: m.mac,
+          linux: m.linux,
+          appid,
+          steamHeader: g.header,
+          steamCapsule: g.capsule,
+        });
+      }
+    }
+    return [...gog, ...this.itchLibrary].sort((a, b) => a.title.localeCompare(b.title, "tr"));
+  }
+
+  private searchStore(appid: number): StoreSearchHit[] {
+    if (!this.accounts.itch) throw invalid("itch_signed_out");
+    const g = this.find(appid);
+    const hit = (productId: string, title: string, score: number): StoreSearchHit => ({
+      store: "itch",
+      productId,
+      title,
+      url: "https://itch.io",
+      coverWide: g.header,
+      developer: g.developers[0] ?? null,
+      price: g.isFree ? null : "$9.99",
+      isFree: g.isFree,
+      win: true,
+      mac: false,
+      linux: false,
+      score,
+    });
+    return [hit(String(8_000_000 + appid), g.name, 1), hit(String(8_500_000 + appid), `${g.name} Demake`, 0)];
+  }
+
+  private linkStoreProduct(store: Store, productId: string, appid: number): null {
+    const g = this.find(appid);
+    const list = this.matches.get(appid) ?? [];
+    list.push({
+      store,
+      productId,
+      title: g.name,
+      url: "https://itch.io",
+      cover: null,
+      coverWide: g.header,
+      price: null,
+      isFree: g.isFree,
+      owned: false,
+      win: true,
+      mac: false,
+      linux: false,
+      method: "manual",
+      score: 1,
+      state: "confirmed",
+      confident: true,
+    });
+    this.matches.set(appid, list);
+    return null;
   }
 
   private setMatchState(store: Store, productId: string, appid: number, state: MatchState): null {
@@ -190,7 +365,7 @@ export class MockBackend {
       storeCounts: {
         gog: visible.filter((g) => g.stores.includes("gog")).length,
         itch: visible.filter((g) => g.stores.includes("itch")).length,
-        owned: 0,
+        owned: this.owned.size,
         gogProducts: this.lastStoreSyncAt == null ? 0 : 8204,
         lastStoreSyncAt: this.lastStoreSyncAt,
       },
@@ -255,7 +430,13 @@ export class MockBackend {
     if (this.worker) throw { kind: "busy", message: "busy" } satisfies CmdError;
     this.worker = kind;
     this.cancelled = false;
-    void (kind === "full" ? this.simulateFull() : kind === "stores" ? this.simulateStores() : this.simulateNewReleases());
+    const run = {
+      full: this.simulateFull,
+      stores: this.simulateStores,
+      library: this.simulateLibrary,
+      new_releases: this.simulateNewReleases,
+    };
+    void run[kind].call(this);
     return null;
   }
 
@@ -286,7 +467,7 @@ export class MockBackend {
     for (let i = 1; i <= steps; i += 1) {
       await sleep(260);
       if (this.cancelled) {
-        this.finish({ kind: "full", outcome: "cancelled", report: null, newReleases: null, stores: null, error: null });
+        this.finish({ kind: "full", outcome: "cancelled", report: null, newReleases: null, stores: null, library: null, error: null });
         return;
       }
       byPopularity.slice(0, Math.round((byPopularity.length * i) / steps)).forEach((g) => this.present.add(g.appid));
@@ -321,6 +502,7 @@ export class MockBackend {
       },
       newReleases: null,
       stores: null,
+      library: null,
       error: null,
     });
   }
@@ -356,6 +538,32 @@ export class MockBackend {
         durationMs: 1500,
       },
       stores: null,
+      library: null,
+      error: null,
+    });
+  }
+
+  private async simulateLibrary() {
+    const startedAt = nowSeconds();
+    const base = { kind: "library" as const, startedAt, resumed: false, page: 0, pages: 0 };
+    this.report({ ...base, phase: "library", fetched: 0, total: 0 });
+    await sleep(900);
+    this.readLibrary();
+    this.report({ ...base, phase: "matching", fetched: 12, total: 12 });
+    await sleep(300);
+    this.finish({
+      kind: "library",
+      outcome: "completed",
+      report: null,
+      newReleases: null,
+      stores: null,
+      library: {
+        gogOwned: this.accounts.gog ? [...this.owned].filter((k) => k.startsWith("gog:")).length : null,
+        itchOwned: this.accounts.itch ? this.itchLibrary.length : null,
+        matched: this.library().filter((i) => i.appid != null).length,
+        gogSignedOut: false,
+        warnings: [],
+      },
       error: null,
     });
   }
@@ -367,7 +575,7 @@ export class MockBackend {
     for (let i = 1; i <= 8; i += 1) {
       await sleep(220);
       if (this.cancelled) {
-        this.finish({ kind: "stores", outcome: "cancelled", report: null, newReleases: null, stores: null, error: null });
+        this.finish({ kind: "stores", outcome: "cancelled", report: null, newReleases: null, stores: null, library: null, error: null });
         return;
       }
       this.report({ ...base, phase: "gog_catalog", fetched: Math.round((catalog * i) / 8), total: catalog });
@@ -402,7 +610,9 @@ export class MockBackend {
         retries: 0,
         durationMs: 3600,
         warnings: [],
+        library: null,
       },
+      library: null,
       error: null,
     });
   }

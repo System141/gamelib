@@ -157,6 +157,12 @@ pub fn gog_login_url(app: State<'_, Arc<App>>) -> String {
     app.gog_login_url()
 }
 
+/// Opens GOG's login page in the default browser, for signing in with the redirect address.
+#[tauri::command]
+pub fn open_gog_login_page(handle: AppHandle, app: State<'_, Arc<App>>) -> CmdResult<()> {
+    open_url(&handle, app.gog_login_url())
+}
+
 /// Signs in to GOG in a separate window showing GOG's own login page.
 #[tauri::command]
 pub async fn gog_login(handle: AppHandle, app: State<'_, Arc<App>>) -> CmdResult<Accounts> {

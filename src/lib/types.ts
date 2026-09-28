@@ -90,9 +90,9 @@ export interface GameMedia {
   screenshots: Screenshot[];
 }
 
-export type WorkerKind = "full" | "new_releases" | "stores";
+export type WorkerKind = "full" | "new_releases" | "stores" | "library";
 export type SyncPhase =
-  "starting" | "tags" | "featured" | "catalog" | "new_releases" | "gog_catalog" | "matching" | "gog_ids" | "finalizing";
+  "starting" | "tags" | "featured" | "catalog" | "new_releases" | "gog_catalog" | "matching" | "gog_ids" | "library" | "finalizing";
 
 export interface SyncProgress {
   kind: WorkerKind;
@@ -152,6 +152,16 @@ export interface StoresReport {
   retries: number;
   durationMs: number;
   warnings: string[];
+  library: LibraryReport | null;
+}
+
+export interface LibraryReport {
+  /** Owned products; null when not signed in there. */
+  gogOwned: number | null;
+  itchOwned: number | null;
+  matched: number;
+  gogSignedOut: boolean;
+  warnings: string[];
 }
 
 export interface SyncFinished {
@@ -160,6 +170,7 @@ export interface SyncFinished {
   report: SyncReport | null;
   newReleases: NewReleasesReport | null;
   stores: StoresReport | null;
+  library: LibraryReport | null;
   error: CmdError | null;
 }
 
@@ -283,3 +294,53 @@ export interface StoreMatch {
   /** Counts as a match; otherwise it is a suggestion to confirm. */
   confident: boolean;
 }
+
+export interface StoreSearchHit {
+  store: Store;
+  productId: string;
+  title: string;
+  url: string | null;
+  coverWide: string | null;
+  developer: string | null;
+  price: string | null;
+  isFree: boolean;
+  win: boolean;
+  mac: boolean;
+  linux: boolean;
+  score: number;
+}
+
+// --- accounts, library, settings --------------------------------------------------------------
+
+export interface Account {
+  username: string;
+}
+
+export interface Accounts {
+  gog: Account | null;
+  itch: Account | null;
+}
+
+export interface LibraryItem {
+  store: Store;
+  productId: string;
+  title: string;
+  url: string | null;
+  cover: string | null;
+  coverWide: string | null;
+  win: boolean;
+  mac: boolean;
+  linux: boolean;
+  /** The Steam game it is, if matched. */
+  appid: number | null;
+  steamHeader: string | null;
+  steamCapsule: string | null;
+}
+
+export interface Settings {
+  libraryDir: string;
+  keepInstallers: boolean;
+  autoUpdate: boolean;
+}
+
+export type SettingsPatch = Partial<Settings>;

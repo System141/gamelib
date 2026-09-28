@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import type { GameLink, LinkInput, MatchState, StoreMatch, TagInfo } from "../lib/types";
+import type { Accounts, GameLink, LinkInput, MatchState, Settings, Store, StoreMatch, TagInfo } from "../lib/types";
 
 export function useStatus() {
   return useQuery({
@@ -119,4 +119,49 @@ export function useSetMatchState() {
       void qc.invalidateQueries({ queryKey: ["status"] });
     },
   });
+}
+
+/** After a product is tied to a game by hand. */
+export function useLinkStoreProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ store, productId, appid }: { store: Store; productId: string; appid: number }) =>
+      api.linkStoreProduct(store, productId, appid),
+    onSuccess: (_, { appid }) => {
+      void qc.invalidateQueries({ queryKey: ["stores", appid] });
+      void qc.invalidateQueries({ queryKey: ["games"] });
+      void qc.invalidateQueries({ queryKey: ["library"] });
+      void qc.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
+// --- accounts, library, settings ------------------------------------------------------------
+
+export function useAccounts() {
+  return useQuery({ queryKey: ["accounts"], queryFn: api.getAccounts });
+}
+
+/** Stores the accounts a sign-in or sign-out returned, and refreshes what depends on them. */
+export function useAccountsUpdate() {
+  const qc = useQueryClient();
+  return (accounts: Accounts) => {
+    qc.setQueryData(["accounts"], accounts);
+    void qc.invalidateQueries({ queryKey: ["library"] });
+    void qc.invalidateQueries({ queryKey: ["status"] });
+    void qc.invalidateQueries({ queryKey: ["stores"] });
+  };
+}
+
+export function useLibrary() {
+  return useQuery({ queryKey: ["library"], queryFn: () => api.getLibrary(null) });
+}
+
+export function useSettings() {
+  return useQuery({ queryKey: ["settings"], queryFn: api.getSettings });
+}
+
+export function useSettingsUpdate() {
+  const qc = useQueryClient();
+  return (settings: Settings) => qc.setQueryData(["settings"], settings);
 }

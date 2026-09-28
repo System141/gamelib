@@ -5,6 +5,8 @@ import { FilterSheet } from "./components/FilterSheet";
 import { FirstRun } from "./components/FirstRun";
 import { GameDetailDialog } from "./components/GameDetailDialog";
 import { GameGrid } from "./components/GameGrid";
+import { LibraryView } from "./components/LibraryView";
+import { SettingsView } from "./components/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { ViewHeader } from "./components/ViewHeader";
@@ -40,6 +42,7 @@ export function App() {
   const fullSync = () => start("full", () => api.startSync(false));
   const newReleases = () => start("new_releases", () => api.fetchNewReleases());
   const storeSync = () => start("stores", () => api.startStoreSync());
+  const librarySync = () => start("library", () => api.startLibrarySync());
   const cancel = () => void api.cancelSync();
 
   const empty = status.data?.gameCount === 0;
@@ -64,6 +67,16 @@ export function App() {
         <main className="flex min-h-0 flex-1 flex-col">
           {status.isLoading ? null : empty ? (
             <FirstRun status={status.data} onFullSync={fullSync} onNewReleases={newReleases} onCancel={cancel} />
+          ) : f.view === "library" ? (
+            <LibraryView
+              search={f.search}
+              status={status.data}
+              onOpenGame={openGame}
+              onRefresh={librarySync}
+              onOpenSettings={() => f.setView("settings")}
+            />
+          ) : f.view === "settings" ? (
+            <SettingsView status={status.data} />
           ) : (
             <>
               <ViewHeader f={f} total={total} status={status.data} tagName={tagName} onNewReleases={newReleases} onStoreSync={storeSync} />

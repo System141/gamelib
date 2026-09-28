@@ -1,13 +1,13 @@
 // "Mağazalar": the game's products on other stores (GOG, itch.io), found by matching.
 
 import clsx from "clsx";
-import { Check, ExternalLink, LoaderCircle, ShieldCheck, Store as StoreIcon, X } from "lucide-react";
+import { Check, ExternalLink, LoaderCircle, Search, ShieldCheck, Store as StoreIcon, X } from "lucide-react";
 import { useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
 import { showToast } from "../lib/toast";
-import type { MatchState, StoreMatch } from "../lib/types";
-import { useSetMatchState, useStatus, useStoreLookup, useStoreMatches } from "../hooks/useData";
+import type { MatchState, StoreMatch, StoreSearchHit } from "../lib/types";
+import { useAccounts, useLinkStoreProduct, useSetMatchState, useStatus, useStoreLookup, useStoreMatches } from "../hooks/useData";
 import { StoreMark } from "./badges";
 import { AppleIcon, LinuxIcon, WindowsIcon } from "./icons";
 import { SmallButton } from "./ui";
@@ -26,6 +26,8 @@ export function StoresSection({ appid, onStoreSync }: Props) {
   const suggestions = list.filter((m) => !m.confident);
   const synced = (status.data?.storeCounts.gogProducts ?? 0) > 0;
   const checking = lookup.isFetching && confident.length === 0;
+  const accounts = useAccounts();
+  const canSearchItch = !!accounts.data?.itch && !confident.some((m) => m.store === "itch");
 
   return (
     <section>
@@ -64,7 +66,69 @@ export function StoresSection({ appid, onStoreSync }: Props) {
       </div>
 
       {suggestions.length > 0 && <Suggestions matches={suggestions} appid={appid} />}
+      {canSearchItch && <ItchSearch appid={appid} />}
     </section>
+  );
+}
+
+/** itch.io has no Steam id cross-reference: search it and let the user pick. */
+function ItchSearch({ appid }: { appid: number }) {
+  const [hits, setHits] = useState<StoreSearchHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const link = useLinkStoreProduct();
+
+  const search = () => {
+    setSearching(true);
+    api
+      .searchStore("itch", appid)
+      .then(setHits)
+      .catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }))
+      .finally(() => setSearching(false));
+  };
+  const pick = (hit: StoreSearchHit) =>
+    link.mutate(
+      { store: hit.store, productId: hit.productId, appid },
+      {
+        onSuccess: () => {
+          setHits(null);
+          showToast({ tone: "success", title: tr.stores.toastConfirmed });
+        },
+        onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }),
+      },
+    );
+
+  if (hits == null) {
+    return (
+      <div className="mt-3">
+        <SmallButton
+          onClick={search}
+          disabled={searching}
+          icon={searching ? <LoaderCircle size={13} className="animate-spin" /> : <Search size={13} />}
+        >
+          {searching ? tr.stores.searching : tr.stores.searchItch}
+        </SmallButton>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 rounded-xl bg-white/2 px-4 py-3 ring-1 ring-white/6">
+      <p className="mb-2 text-xs text-ink-400">{hits.length === 0 ? tr.stores.noHits : tr.stores.itchHint}</p>
+      <div className="space-y-1.5">
+        {hits.slice(0, 6).map((h) => (
+          <div key={h.productId} className="flex items-center gap-2.5">
+            <StoreMark store="itch" size={18} />
+            <span className="min-w-0 flex-1 truncate text-sm text-ink-100" title={h.title}>
+              {h.title}
+              {h.developer && <span className="ml-2 text-xs text-ink-400">{h.developer}</span>}
+              {h.price && <span className="ml-2 text-xs text-ink-500">{h.price}</span>}
+            </span>
+            <SmallButton tone={h.score >= 0.85 ? "primary" : "default"} onClick={() => pick(h)} icon={<Check size={13} />}>
+              {tr.stores.thisOne}
+            </SmallButton>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
+  Accounts,
   AppStatus,
   CmdError,
   GameDetail,
@@ -8,12 +9,16 @@ import type {
   GameMedia,
   GamePage,
   GameQuery,
+  LibraryItem,
   LinkCheck,
   LinkInput,
   MatchState,
+  Settings,
+  SettingsPatch,
   SiteInfo,
   Store,
   StoreMatch,
+  StoreSearchHit,
   SyncFinished,
   SyncProgress,
   TagInfo,
@@ -35,6 +40,23 @@ export const api = {
   setMatchState: (store: Store, productId: string, appid: number, state: MatchState) =>
     invoke<void>("set_match_state", { store, productId, appid, state }),
   openStorePage: (store: Store, productId: string) => invoke<void>("open_store_page", { store, productId }),
+  searchStore: (store: Store, appid: number) => invoke<StoreSearchHit[]>("search_store", { store, appid }),
+  linkStoreProduct: (store: Store, productId: string, appid: number) => invoke<void>("link_store_product", { store, productId, appid }),
+  getAccounts: () => invoke<Accounts>("get_accounts"),
+  gogLoginUrl: () => invoke<string>("gog_login_url"),
+  openGogLoginPage: () => invoke<void>("open_gog_login_page"),
+  /** Desktop only: GOG's login page in a separate window. */
+  gogLogin: () => invoke<Accounts>("gog_login"),
+  gogLoginWithCode: (redirect: string) => invoke<Accounts>("gog_login_with_code", { redirect }),
+  itchSetKey: (key: string) => invoke<Accounts>("itch_set_key", { key }),
+  signOut: (store: Store) => invoke<Accounts>("sign_out", { store }),
+  startLibrarySync: () => invoke<void>("start_library_sync"),
+  getLibrary: (store: Store | null = null) => invoke<LibraryItem[]>("get_library", { store }),
+  openAccountPage: (store: Store) => invoke<void>("open_account_page", { store }),
+  getSettings: () => invoke<Settings>("get_settings"),
+  updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
+  /** Desktop only: a folder picker; null when cancelled. */
+  pickLibraryDir: () => invoke<Settings | null>("pick_library_dir"),
   listSites: () => invoke<SiteInfo[]>("list_sites"),
   listLinks: (appid: number) => invoke<GameLink[]>("list_links", { appid }),
   saveLink: (input: LinkInput) => invoke<GameLink>("save_link", { input }),

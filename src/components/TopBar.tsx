@@ -15,7 +15,7 @@ import {
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { tr } from "../i18n/tr";
 import type { AppStatus, SortKey } from "../lib/types";
-import type { FiltersState } from "../hooks/useFilters";
+import { type FiltersState, isGridView } from "../hooks/useFilters";
 import { useDismiss } from "../hooks/useUtils";
 import { Logo } from "./icons";
 
@@ -45,6 +45,8 @@ export function TopBar({ f, status, catalogEmpty, onOpenFilters, onFullSync, onN
           </div>
           <div className="flex-1" />
         </>
+      ) : f.view === "settings" ? (
+        <div className="flex-1" />
       ) : (
         <div className="flex min-w-[240px] flex-1 justify-center">
           <SearchBox value={f.search} onChange={f.setSearch} />
@@ -52,7 +54,7 @@ export function TopBar({ f, status, catalogEmpty, onOpenFilters, onFullSync, onN
       )}
 
       <div className="flex shrink-0 items-center gap-2">
-        {!catalogEmpty && (
+        {!catalogEmpty && isGridView(f.view) && (
           <>
             <SortMenu value={f.sort} searching={f.searching} onChange={f.setSort} />
             <button
@@ -227,8 +229,8 @@ function SyncButton({
         <span className="relative font-medium whitespace-nowrap tabular-nums" title={tr.sync.phases[progress?.phase ?? "starting"]}>
           {status.worker === "new_releases"
             ? tr.views.new
-            : status.worker === "stores"
-              ? `${tr.sync.storesWorker}${pct != null ? ` %${pct}` : ""}`
+            : status.worker === "stores" || status.worker === "library"
+              ? `${status.worker === "stores" ? tr.sync.storesWorker : tr.sync.libraryWorker}${pct != null ? ` %${pct}` : ""}`
               : pct != null
                 ? `%${pct}`
                 : tr.sync.phases[progress?.phase ?? "starting"]}

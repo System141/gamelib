@@ -274,6 +274,7 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         }
         "get_accounts" => to_json(&app.accounts()?),
         "gog_login_url" => json!(app.gog_login_url()),
+        "open_gog_login_page" => json!({ "url": app.gog_login_url() }),
         // The sign-in window is the desktop app's; the preview pastes the redirect instead.
         "gog_login" | "pick_library_dir" => return Err(desktop_only()),
         "gog_login_with_code" => {

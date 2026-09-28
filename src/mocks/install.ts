@@ -64,13 +64,14 @@ function createEventBus() {
   return { emit, handle };
 }
 
-/** Small corner note saying where the preview's data comes from. Plain DOM: it is not part of the app. */
+/** Small corner note saying where the preview's data comes from, right of the sidebar so it
+ *  never covers navigation. Plain DOM: it is not part of the app. */
 function showBadge(source: "server" | "fixture", title: string, hint: string) {
   const badge = document.createElement("div");
   badge.dataset.previewBadge = source;
   badge.setAttribute("role", "status");
   badge.className =
-    "animate-fade-in fixed bottom-4 left-4 z-[55] flex max-w-sm items-start gap-2.5 rounded-xl bg-ink-800/95 py-2.5 pr-2 pl-3 text-[12px] leading-snug shadow-xl shadow-black/50 ring-1 ring-white/10 backdrop-blur";
+    "animate-fade-in fixed bottom-4 left-20 z-[55] flex max-w-sm items-start gap-2.5 rounded-xl bg-ink-800/95 py-2.5 pr-2 pl-3 text-[12px] leading-snug shadow-xl shadow-black/50 ring-1 ring-white/10 backdrop-blur xl:left-64";
 
   const dot = document.createElement("span");
   dot.className = `mt-1 size-2 shrink-0 rounded-full ${source === "server" ? "bg-success" : "bg-warning"}`;

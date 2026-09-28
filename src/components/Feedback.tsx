@@ -26,14 +26,14 @@ export function SyncBanner({
   const [dismissed, setDismissed] = useState<string | null>(null);
   if (!status) return null;
 
-  if (status.worker === "full" || status.worker === "stores") {
+  if (status.worker === "full" || status.worker === "stores" || status.worker === "library") {
     const p = status.progress;
     const pct = p && p.total > 0 ? Math.min(100, (p.fetched / p.total) * 100) : null;
-    const counted = status.worker === "stores" ? tr.sync.storesProgress : tr.firstRun.progress;
+    const counted = status.worker === "full" ? tr.firstRun.progress : tr.sync.storesProgress;
     return (
       <div className="relative shrink-0 border-b border-white/6 bg-ink-850/80">
         <div className="flex h-9 items-center gap-3 px-8 text-[13px] text-ink-300">
-          <LoaderCircle size={14} className={clsx("animate-spin", status.worker === "stores" ? "text-gog" : "text-accent")} />
+          <LoaderCircle size={14} className={clsx("animate-spin", status.worker === "full" ? "text-accent" : "text-gog")} />
           <span className="text-ink-100">{tr.sync.phases[p?.phase ?? "starting"]}</span>
           {p && p.total > 0 && <span className="tabular-nums">{counted(p.fetched, p.total)}</span>}
         </div>
