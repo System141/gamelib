@@ -55,10 +55,12 @@ CREATE TABLE games(
   synced_at                INTEGER NOT NULL
 );
 
-CREATE INDEX idx_games_popular ON games(review_count DESC, appid);
-CREATE INDEX idx_games_rating  ON games(rating DESC, review_count DESC, appid);
-CREATE INDEX idx_games_release ON games(release_date DESC, appid DESC);
-CREATE INDEX idx_games_name    ON games(search_name, appid);
+-- One index per sort order. The trailing delisted/adult columns let SQLite apply the default
+-- visibility filter from the index alone, so deep pages skip rows without touching the table.
+CREATE INDEX idx_games_popular ON games(review_count DESC, appid, delisted, adult);
+CREATE INDEX idx_games_rating  ON games(rating DESC, review_count DESC, appid, delisted, adult);
+CREATE INDEX idx_games_release ON games(release_date DESC, appid DESC, delisted, adult);
+CREATE INDEX idx_games_name    ON games(search_name, appid, delisted, adult);
 
 CREATE TABLE game_tags(
   tagid INTEGER NOT NULL,

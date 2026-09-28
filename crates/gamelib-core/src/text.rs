@@ -10,7 +10,9 @@ pub(crate) fn decode_entities(s: &str) -> String {
     while let Some(pos) = rest.find('&') {
         out.push_str(&rest[..pos]);
         rest = &rest[pos..];
-        let Some(end) = rest[..rest.len().min(12)].find(';') else {
+        // Entities are short; look for the `;` byte-wise so multi-byte text after a lone `&`
+        // never gets sliced mid-character.
+        let Some(end) = rest.bytes().take(12).position(|b| b == b';') else {
             out.push('&');
             rest = &rest[1..];
             continue;
@@ -89,6 +91,18 @@ mod tests {
         assert_eq!(decode_entities("it&#39;s &#x2764;"), "it's ❤");
         assert_eq!(decode_entities("a & b"), "a & b");
         assert_eq!(decode_entities("&unknown; &"), "&unknown; &");
+    }
+
+    #[test]
+    fn lone_ampersand_before_multibyte_text() {
+        // From a real store description: `&` followed by a curly apostrophe within 12 bytes.
+        let s = "& Anastasia’s unique playstyles.";
+        assert_eq!(decode_entities(s), s);
+        assert_eq!(
+            decode_entities("Tom&Jerry’s çılgın & güzel;"),
+            "Tom&Jerry’s çılgın & güzel;"
+        );
+        assert_eq!(decode_entities("&ç;"), "&ç;");
     }
 
     #[test]

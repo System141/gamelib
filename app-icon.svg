@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c2b4b"/>
+      <stop offset="1" stop-color="#0b0f16"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#66c0f4"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="216" fill="url(#bg)"/>
+  <rect x="48" y="48" width="928" height="928" rx="216" fill="none" stroke="#66c0f4" stroke-opacity="0.18" stroke-width="12"/>
+  <rect x="262" y="262" width="300" height="450" rx="46" fill="#66c0f4" fill-opacity="0.32" transform="rotate(-13 412 487)"/>
+  <rect x="462" y="262" width="300" height="450" rx="46" fill="#a78bfa" fill-opacity="0.42" transform="rotate(13 612 487)"/>
+  <rect x="352" y="292" width="320" height="480" rx="50" fill="url(#card)"/>
+  <path d="M478 440 C478 424 495 414 509 422 L614 485 C627 493 627 512 614 520 L509 583 C495 591 478 581 478 565 Z" fill="#0b0f16" fill-opacity="0.88"/>
+</svg>

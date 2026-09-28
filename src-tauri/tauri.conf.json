@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GameLib",
+  "version": "0.1.0",
+  "identifier": "com.gamelib.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "GameLib",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "center": true,
+        "theme": "Dark",
+        "backgroundColor": "#0b0f16"
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self' ipc: http://ipc.localhost",
+        "connect-src": "ipc: http://ipc.localhost",
+        "img-src": "'self' data: https://shared.akamai.steamstatic.com https://shared.fastly.steamstatic.com",
+        "style-src": "'self'",
+        "font-src": "'self' data:",
+        "script-src": "'self'"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Game",
+    "shortDescription": "Steam oyun kataloğu",
+    "longDescription": "Steam'deki tüm oyunları görselleriyle listeleyen masaüstü uygulaması.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

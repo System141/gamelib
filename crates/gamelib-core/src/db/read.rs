@@ -95,6 +95,10 @@ fn build_filter(q: &GameQuery, now: i64) -> Filter {
     if q.has_links {
         conds.push("EXISTS (SELECT 1 FROM game_links l WHERE l.appid = g.appid)".into());
     }
+    if q.sort == SortKey::Oldest {
+        // A handful of games have no release date; they would otherwise all lead the list.
+        conds.push("g.release_date IS NOT NULL".into());
+    }
     Filter {
         sql: conds.join(" AND "),
         params,
@@ -110,12 +114,21 @@ fn build_order(q: &GameQuery) -> (String, Vec<Value>) {
     };
     match sort {
         SortKey::Relevance => {
+            // Match quality (exact 0, name prefix 2, elsewhere 4) minus two points per order of
+            // magnitude of reviews: an obscure exact match must not bury a hugely popular game
+            // ("stalker" should show S.T.A.L.K.E.R. before a 15-review game named "Stalker").
             let term = search.unwrap_or_default();
             (
-                "CASE WHEN g.search_name = ? THEN 0 WHEN g.search_name LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END,
+                "(CASE WHEN g.search_name = ? THEN 0 WHEN g.search_name LIKE ? ESCAPE '\\' THEN 2 ELSE 4 END)
+                 - (CASE WHEN g.review_count >= 1000000 THEN 12 WHEN g.review_count >= 100000 THEN 10
+                         WHEN g.review_count >= 10000 THEN 8 WHEN g.review_count >= 1000 THEN 6
+                         WHEN g.review_count >= 100 THEN 4 WHEN g.review_count >= 10 THEN 2 ELSE 0 END),
                  g.review_count DESC, g.appid"
                     .into(),
-                vec![Value::Text(term.clone()), Value::Text(format!("{}%", escape_like(&term)))],
+                vec![
+                    Value::Text(term.clone()),
+                    Value::Text(format!("{}%", escape_like(&term))),
+                ],
             )
         }
         SortKey::Popular => ("g.review_count DESC, g.appid".into(), vec![]),

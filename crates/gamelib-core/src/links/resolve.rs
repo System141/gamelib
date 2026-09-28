@@ -110,7 +110,7 @@ pub fn follow_redirects(start: &Url, http: &Client) -> LinkCheck {
 fn request(http: &Client, url: &Url) -> reqwest::Result<Response> {
     let resp = http.head(url.clone()).send()?;
     match resp.status().as_u16() {
-        403 | 404 | 405 | 501 => {
+        400 | 403 | 404 | 405 | 501 => {
             drop(resp);
             http.get(url.clone()).header(RANGE, "bytes=0-0").send()
         }

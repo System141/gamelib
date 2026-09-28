@@ -111,8 +111,8 @@ fn search_finds_normalized_names() {
     );
     assert_eq!(
         names(&mut db, &search("wit")),
-        ["Witcher Adventure Game", "The Witcher 3: Wild Hunt"],
-        "name prefix first"
+        ["The Witcher 3: Wild Hunt", "Witcher Adventure Game"],
+        "800k reviews outweigh the other game's name prefix"
     );
     assert_eq!(
         names(&mut db, &search("570")),
@@ -123,19 +123,52 @@ fn search_finds_normalized_names() {
 }
 
 #[test]
-fn relevance_prefers_exact_then_prefix() {
+fn relevance_balances_match_quality_and_popularity() {
     let mut db = sample_db();
-    let mut extra = item(292032, "Witcher", NOW - 10 * DAY, 1, &[9]);
-    extra.best_purchase_option = None;
-    store(&mut db, &[extra], NOW);
+    // Equally popular: exact name, then name prefix, then a match elsewhere in the name.
+    store(
+        &mut db,
+        &[
+            item(1, "Portal Knights Arena", NOW, 500, &[9]),
+            item(2, "Portal", NOW, 500, &[9]),
+            item(3, "Super Portal", NOW, 500, &[9]),
+        ],
+        NOW,
+    );
+    assert_eq!(
+        names(&mut db, &search("portal")),
+        ["Portal", "Portal Knights Arena", "Super Portal"]
+    );
+    // An obscure exact match does not bury a hugely popular game.
+    store(&mut db, &[item(4, "Witcher", NOW, 1, &[9])], NOW);
     assert_eq!(
         names(&mut db, &search("witcher")),
         [
-            "Witcher",
+            "The Witcher 3: Wild Hunt",
             "Witcher Adventure Game",
-            "The Witcher 3: Wild Hunt"
+            "Witcher"
         ]
     );
+}
+
+#[test]
+fn oldest_sort_skips_undated_games() {
+    let mut db = sample_db();
+    let mut undated = item(8, "No Date Yet", NOW, 5, &[9]);
+    undated.release = None;
+    store(&mut db, &[undated], NOW);
+    let q = GameQuery {
+        sort: SortKey::Oldest,
+        ..Default::default()
+    };
+    let oldest = names(&mut db, &q);
+    assert_eq!(oldest[0], "S.T.A.L.K.E.R.: Shadow of Chernobyl");
+    assert!(!oldest.contains(&"No Date Yet".to_string()));
+    let newest = GameQuery {
+        sort: SortKey::Newest,
+        ..Default::default()
+    };
+    assert_eq!(names(&mut db, &newest).last().unwrap(), "No Date Yet");
 }
 
 #[test]
