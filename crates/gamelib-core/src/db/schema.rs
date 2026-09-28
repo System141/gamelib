@@ -224,7 +224,34 @@ CREATE TABLE download_files(
 CREATE INDEX idx_download_files ON download_files(download_id, position);
 "#;
 
-const MIGRATIONS: &[&str] = &[MIGRATION_1, MIGRATION_2, MIGRATION_3];
+/// Installed games, and each finished download's install state.
+const MIGRATION_4: &str = r#"
+ALTER TABLE downloads ADD COLUMN install_state TEXT;
+ALTER TABLE downloads ADD COLUMN install_kind TEXT;
+ALTER TABLE downloads ADD COLUMN install_error_kind TEXT;
+ALTER TABLE downloads ADD COLUMN install_error TEXT;
+
+CREATE INDEX idx_downloads_install ON downloads(install_state, finished_at);
+
+CREATE TABLE installs(
+  store        TEXT NOT NULL,
+  product_id   TEXT NOT NULL,
+  appid        INTEGER,
+  title        TEXT NOT NULL,
+  dir          TEXT,
+  exe          TEXT,
+  args         TEXT NOT NULL DEFAULT '',
+  workdir      TEXT,
+  method       TEXT NOT NULL,
+  candidates   TEXT NOT NULL DEFAULT '[]',
+  uninstaller  TEXT,
+  option_label TEXT,
+  installed_at INTEGER NOT NULL,
+  PRIMARY KEY (store, product_id)
+) WITHOUT ROWID;
+"#;
+
+const MIGRATIONS: &[&str] = &[MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4];
 
 /// Schema version this build expects.
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();

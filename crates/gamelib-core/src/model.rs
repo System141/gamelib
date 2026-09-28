@@ -795,6 +795,11 @@ pub struct Download {
     pub error: Option<ErrorInfo>,
     pub created_at: i64,
     pub finished_at: Option<i64>,
+    /// Installing the finished download (`None` for downloads from before installs existed).
+    pub install_state: Option<InstallState>,
+    /// What the downloaded file turned out to be (`inno_setup`, `zip`, `rar`, …).
+    pub install_kind: Option<String>,
+    pub install_error: Option<ErrorInfo>,
 }
 
 /// Live progress of the running download (payload of `download:progress`).
@@ -819,4 +824,134 @@ pub struct DownloadList {
     /// Newest first.
     pub items: Vec<Download>,
     pub live: Option<DownloadProgress>,
+    /// Progress of the running install.
+    pub installing: Option<InstallProgress>,
+}
+
+// ---------------------------------------------------------------------------
+// Installs
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallState {
+    /// Waiting for the install thread.
+    Waiting,
+    Installing,
+    Installed,
+    Failed,
+    /// Someone else's installer: it only runs once the user agrees.
+    Confirm,
+    /// Agreed; waiting for the install thread.
+    Approved,
+    /// GameLib cannot install this file (a RAR, a macOS package, another system's installer);
+    /// it stays in the downloads folder.
+    Manual,
+}
+
+impl InstallState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            InstallState::Waiting => "waiting",
+            InstallState::Installing => "installing",
+            InstallState::Installed => "installed",
+            InstallState::Failed => "failed",
+            InstallState::Confirm => "confirm",
+            InstallState::Approved => "approved",
+            InstallState::Manual => "manual",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        [
+            InstallState::Waiting,
+            InstallState::Installing,
+            InstallState::Installed,
+            InstallState::Failed,
+            InstallState::Confirm,
+            InstallState::Approved,
+            InstallState::Manual,
+        ]
+        .into_iter()
+        .find(|state| state.as_str() == s)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallMethod {
+    /// A GOG installer, run silently.
+    Gog,
+    /// An archive GameLib unpacked.
+    Archive,
+    /// A single program copied into the library.
+    Portable,
+    /// Someone else's installer.
+    Installer,
+    /// Installed outside GameLib (GOG Galaxy or a GOG installer run by hand).
+    Galaxy,
+}
+
+impl InstallMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            InstallMethod::Gog => "gog",
+            InstallMethod::Archive => "archive",
+            InstallMethod::Portable => "portable",
+            InstallMethod::Installer => "installer",
+            InstallMethod::Galaxy => "galaxy",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        [
+            InstallMethod::Gog,
+            InstallMethod::Archive,
+            InstallMethod::Portable,
+            InstallMethod::Installer,
+            InstallMethod::Galaxy,
+        ]
+        .into_iter()
+        .find(|m| m.as_str() == s)
+    }
+}
+
+/// An installed game.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Installed {
+    pub store: Store,
+    pub product_id: String,
+    /// The Steam game it is, if matched.
+    pub appid: Option<u32>,
+    pub title: String,
+    /// The install folder, when known (someone else's installer may not say).
+    pub dir: Option<String>,
+    /// What "Oyna" starts; `None` until one is chosen.
+    pub exe: Option<String>,
+    /// Arguments, as one command line.
+    pub args: String,
+    pub workdir: Option<String>,
+    pub method: InstallMethod,
+    /// Other programs in the folder that could be the game.
+    pub candidates: Vec<String>,
+    /// The variant installed (e.g. "Windows · Türkçe · 1.6.2").
+    pub option_label: Option<String>,
+    pub installed_at: i64,
+    /// Found in GOG's registry entries rather than installed by GameLib.
+    pub external: bool,
+    /// The matched Steam game's header image.
+    pub steam_header: Option<String>,
+}
+
+/// Progress of the running install (payload of `install:progress`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallProgress {
+    pub download_id: i64,
+    /// "checking", "unpacking", "installing" or "cleaning".
+    pub stage: String,
+    /// Bytes unpacked so far (0 while an installer runs).
+    pub done: u64,
+    pub total: u64,
 }

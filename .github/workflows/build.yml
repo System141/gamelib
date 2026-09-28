@@ -58,6 +58,22 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
+  check-windows:
+    name: Check (Windows)
+    # The Windows-only code (credential encryption, installers, the downloaded-file mark, GOG's
+    # registry entries) only compiles and runs here.
+    if: github.event_name == 'push'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p gamelib-core -p gamelib-cli --all-targets --locked -- -D warnings
+      - run: cargo test -p gamelib-core -p gamelib-cli --locked
+
   plan:
     name: Plan installers
     if: >-

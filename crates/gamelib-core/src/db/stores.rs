@@ -569,6 +569,18 @@ pub fn library(conn: &Connection, store: Option<Store>) -> Result<Vec<LibraryIte
     Ok(items)
 }
 
+/// A Steam game's header image.
+pub fn steam_header(conn: &Connection, appid: u32) -> Result<Option<String>> {
+    let row: Option<(Option<String>, Option<String>)> = conn
+        .query_row(
+            "SELECT asset_format, img_header FROM games WHERE appid = ?1",
+            params![appid],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    Ok(row.and_then(|(format, header)| asset_url(format.as_deref(), header.as_deref())))
+}
+
 /// A product's title and the Steam game it is confidently tied to (for a download's record).
 pub fn product_summary(
     conn: &Connection,

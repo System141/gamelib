@@ -2,24 +2,26 @@
 // showing a download's progress with its controls.
 
 import clsx from "clsx";
-import { Download as DownloadIcon, FolderOpen, LoaderCircle, Pause, Play, RotateCcw, X } from "lucide-react";
+import { Download as DownloadIcon, LoaderCircle, Pause, Play, RotateCcw, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
 import { formatBytes, formatDuration, formatPercent } from "../lib/format";
 import { showToast } from "../lib/toast";
-import type { CmdError, Download, DownloadProgress, FileOption, Platform, Store } from "../lib/types";
+import type { CmdError, Download, DownloadProgress, FileOption, InstallProgress, Platform, Store } from "../lib/types";
 import { downloadOf, useDownloads, useEnqueueDownload, useSettings, useStoreFiles } from "../hooks/useData";
 import { StoreMark } from "./badges";
 import { AppleIcon, LinuxIcon, WindowsIcon } from "./icons";
-import { SmallButton } from "./ui";
+import { InstallLine } from "./InstallActions";
+import { IconButton, SmallButton } from "./ui";
 
 /** The latest download of a product, with live progress while it runs. */
 export function useProductDownload(store: Store, productId: string) {
   const list = useDownloads();
   const download = downloadOf(list.data, store, productId);
   const live = download && list.data?.live?.id === download.id ? list.data.live : null;
-  return { download, live };
+  const installing = download && list.data?.installing?.downloadId === download.id ? list.data.installing : null;
+  return { download, live, installing };
 }
 
 /** Commands on a download; their results arrive as `download:state` events. */
@@ -231,20 +233,28 @@ export function percentOf(d: Download, live: DownloadProgress | null): number {
 }
 
 /** A download's state, progress and controls in a small space (store sections, library cards). */
-export function DownloadLine({ download, live }: { download: Download; live: DownloadProgress | null }) {
+export function DownloadLine({
+  download,
+  live,
+  installing,
+  compact,
+}: {
+  download: Download;
+  live: DownloadProgress | null;
+  installing?: InstallProgress | null;
+  /** Short texts, for narrow cards. */
+  compact?: boolean;
+}) {
   const act = useDownloadActions();
   const [confirm, setConfirm] = useState(false);
   const pct = percentOf(download, live);
   const verifying = download.state === "downloading" && live?.stage === "verifying";
   const label = verifying ? tr.downloads.verifying : tr.downloads.states[download.state];
-  const tone =
-    download.state === "failed"
-      ? "text-danger"
-      : download.state === "completed"
-        ? "text-success"
-        : download.state === "downloading"
-          ? "text-accent-soft"
-          : "text-ink-300";
+  const tone = download.state === "failed" ? "text-danger" : download.state === "downloading" ? "text-accent-soft" : "text-ink-300";
+
+  if (download.state === "completed") {
+    return <InstallLine download={download} progress={installing?.downloadId === download.id ? installing : null} compact={compact} />;
+  }
 
   if (confirm) {
     return (
@@ -270,9 +280,7 @@ export function DownloadLine({ download, live }: { download: Download; live: Dow
             <DownloadIcon size={13} className="shrink-0" />
           )}
           <span className="truncate">{label}</span>
-          {download.state !== "completed" && download.state !== "queued" && (
-            <span className="text-ink-300 tabular-nums">{formatPercent(pct)}</span>
-          )}
+          {download.state !== "queued" && <span className="text-ink-300 tabular-nums">{formatPercent(pct)}</span>}
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-1">
           {download.state === "downloading" && (
@@ -284,24 +292,13 @@ export function DownloadLine({ download, live }: { download: Download; live: Dow
           {download.state === "failed" && (
             <IconButton label={tr.downloads.retry} icon={<RotateCcw size={13} />} onClick={() => act.resume(download)} />
           )}
-          {download.state === "completed" ? (
-            <IconButton label={tr.downloads.openFolder} icon={<FolderOpen size={13} />} onClick={() => act.openFolder(download)} />
-          ) : (
-            <IconButton label={tr.downloads.cancelDownload} icon={<X size={13} />} onClick={() => setConfirm(true)} />
-          )}
+          <IconButton label={tr.downloads.cancelDownload} icon={<X size={13} />} onClick={() => setConfirm(true)} />
         </span>
       </div>
-      {download.state !== "completed" && (
-        <>
-          <ProgressBar pct={pct} state={download.state} />
-          <div
-            className="mt-1 truncate text-[11.5px] text-ink-400 tabular-nums"
-            title={download.error ? errorText(download.error) : undefined}
-          >
-            {download.state === "failed" && download.error ? errorText(download.error) : progressText(download, live)}
-          </div>
-        </>
-      )}
+      <ProgressBar pct={pct} state={download.state} />
+      <div className="mt-1 truncate text-[11.5px] text-ink-400 tabular-nums" title={download.error ? errorText(download.error) : undefined}>
+        {download.state === "failed" && download.error ? errorText(download.error) : progressText(download, live)}
+      </div>
     </div>
   );
 }
@@ -323,34 +320,5 @@ export function ProgressBar({ pct, state, className }: { pct: number; state: Dow
         style={{ width: `${pct}%` }}
       />
     </div>
-  );
-}
-
-export function IconButton({
-  label,
-  icon,
-  onClick,
-  tone = "default",
-}: {
-  label: string;
-  icon: ReactNode;
-  onClick: () => void;
-  tone?: "default" | "danger";
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className={clsx(
-        "grid size-7 place-items-center rounded-md ring-1 transition",
-        tone === "danger"
-          ? "text-danger ring-danger/30 hover:bg-danger/15"
-          : "bg-white/4 text-ink-200 ring-white/8 hover:bg-white/10 hover:text-white",
-      )}
-    >
-      {icon}
-    </button>
   );
 }

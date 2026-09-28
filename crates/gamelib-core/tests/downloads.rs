@@ -1,4 +1,5 @@
-//! The download queue against fake GOG and itch.io services and a CDN that supports ranges.
+//! The download queue and installs against fake GOG and itch.io services and a CDN that
+//! supports ranges.
 
 mod common;
 
@@ -13,7 +14,10 @@ use gamelib_core::db::Db;
 use gamelib_core::db::stores::{insert_extra_product, set_owned};
 use gamelib_core::downloads::sources::this_platform;
 use gamelib_core::downloads::{EVENT_PROGRESS, EVENT_STATE};
-use gamelib_core::model::{DownloadState, Platform, Store};
+use gamelib_core::install::EVENT_CHANGED;
+use gamelib_core::model::{
+    DownloadState, InstallMethod, InstallState, Platform, SettingsPatch, Store,
+};
 use gamelib_core::secrets::{GogTokens, ItchKey, SecretStore};
 use gamelib_core::stores::{StoreEndpoints, StoreProduct, StoreSyncOptions};
 use gamelib_core::{Error, unix_now};
@@ -672,4 +676,287 @@ fn itch_uploads_follow_the_redirect_with_the_download_key() {
     assert_eq!(d.title, "Celeste");
     s.events.state(d.id, "completed");
     assert_eq!(read(&d.dir, "celeste-win.zip"), game);
+}
+
+// --- installs ------------------------------------------------------------------------------------
+
+/// An itch.io upload on the fake service.
+struct Upload {
+    id: u64,
+    name: &'static str,
+    bytes: Vec<u8>,
+}
+
+/// itch.io's API for game 11 (owned with download key 900) and a CDN serving its uploads.
+fn itch_fake(uploads: Vec<Upload>) -> TestServer {
+    let uploads = Arc::new(uploads);
+    TestServer::start(move |req: &Request| {
+        let authorized = req.header("authorization") == Some(ITCH_KEY);
+        if req.path == "/games/11/uploads" && authorized {
+            let list: Vec<Value> = uploads
+                .iter()
+                .map(|u| json!({"id": u.id, "filename": u.name, "size": u.bytes.len(), "traits": ["p_windows", "p_linux"], "type": "default"}))
+                .collect();
+            return Response::json(json!({ "uploads": list }).to_string());
+        }
+        if let Some(rest) = req.path.strip_prefix("/uploads/")
+            && let Some(id) = rest.strip_suffix("/download")
+            && authorized
+        {
+            let u = uploads.iter().find(|u| u.id.to_string() == id).unwrap();
+            return Response::status(302)
+                .with_header("Location", format!("{}/cdn/{}", base(req), u.name));
+        }
+        if let Some(name) = req.path.strip_prefix("/cdn/")
+            && let Some(u) = uploads.iter().find(|u| u.name == name)
+        {
+            return serve_file(req, &u.bytes);
+        }
+        Response::status(404)
+    })
+}
+
+fn zip_bytes(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    use std::io::Write;
+    let mut out = std::io::Cursor::new(Vec::new());
+    {
+        let mut w = zip::ZipWriter::new(&mut out);
+        let opts = zip::write::SimpleFileOptions::default().unix_permissions(0o755);
+        for (name, data) in entries {
+            w.start_file(*name, opts).unwrap();
+            w.write_all(data).unwrap();
+        }
+        w.finish().unwrap();
+    }
+    out.into_inner()
+}
+
+impl Events {
+    fn install_state(&self, id: i64, state: &str) -> Value {
+        self.wait(state, |e, p| {
+            e == EVENT_STATE && p["id"] == id && p["installState"] == state
+        })
+    }
+}
+
+#[cfg(unix)]
+fn wait_for_file(path: &Path) -> bool {
+    for _ in 0..150 {
+        if std::fs::read_to_string(path).is_ok_and(|s| !s.is_empty()) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    false
+}
+
+#[test]
+fn archives_are_installed_started_and_uninstalled() {
+    let game = zip_bytes(&[
+        ("Celeste/Celeste.exe", b"MZ not really"),
+        (
+            "Celeste/celeste.x86_64",
+            b"#!/bin/sh\necho started > started.txt\n",
+        ),
+        ("Celeste/Content/level1.bin", &[1u8; 3000]),
+    ]);
+    let server = itch_fake(vec![Upload {
+        id: 5,
+        name: "celeste.zip",
+        bytes: game,
+    }]);
+    let s = setup("install-zip", &server.base, false, true);
+    s.app.start_downloads().unwrap();
+    let d = s.app.enqueue_download(Store::Itch, "11", "5").unwrap();
+
+    let installed = s.events.install_state(d.id, "installed");
+    assert_eq!(installed["installKind"], "zip");
+    let games = s.app.installs().unwrap();
+    assert_eq!(games.len(), 1);
+    let game = &games[0];
+    let dir = s.library().join("Celeste");
+    assert_eq!(game.method, InstallMethod::Archive);
+    assert_eq!(
+        game.dir.as_deref(),
+        Some(dir.display().to_string().as_str())
+    );
+    assert!(
+        dir.join("Content").join("level1.bin").exists(),
+        "the wrapping folder is unwrapped"
+    );
+    let program = if cfg!(windows) {
+        "Celeste.exe"
+    } else {
+        "celeste.x86_64"
+    };
+    assert_eq!(game.exe, Some(dir.join(program).display().to_string()));
+    assert!(
+        !Path::new(&d.dir).exists(),
+        "the download is removed once installed"
+    );
+    assert!(s.events.count(EVENT_CHANGED) >= 1);
+    assert_eq!(s.app.install_folder(Store::Itch, "11").unwrap(), dir);
+
+    #[cfg(unix)]
+    {
+        s.app.launch_game(Store::Itch, "11").unwrap();
+        assert!(
+            wait_for_file(&dir.join("started.txt")),
+            "the game started in its folder"
+        );
+    }
+
+    // Another program can be chosen; a relative path cannot.
+    let other = dir.join("Content").join("level1.bin").display().to_string();
+    let changed = s.app.set_launch_target(Store::Itch, "11", &other).unwrap();
+    assert_eq!(changed.exe.as_deref(), Some(other.as_str()));
+    assert!(matches!(
+        s.app.set_launch_target(Store::Itch, "11", "Celeste.exe"),
+        Err(Error::Invalid("launch_target"))
+    ));
+
+    s.app.uninstall_game(Store::Itch, "11").unwrap();
+    assert!(!dir.exists());
+    assert!(s.app.installs().unwrap().is_empty());
+    assert_eq!(s.app.downloads().unwrap().items[0].install_state, None);
+    assert!(matches!(
+        s.app.launch_game(Store::Itch, "11"),
+        Err(Error::NotFound)
+    ));
+}
+
+#[test]
+fn updates_go_into_the_same_folder_and_keep_saves() {
+    let v1 = zip_bytes(&[("Game/game.x86_64", b"v1"), ("Game/Game.exe", b"v1")]);
+    let v2 = zip_bytes(&[
+        ("Game/game.x86_64", b"v2"),
+        ("Game/Game.exe", b"v2"),
+        ("Game/new.pak", b"new"),
+    ]);
+    let server = itch_fake(vec![
+        Upload {
+            id: 5,
+            name: "game-1.0.zip",
+            bytes: v1,
+        },
+        Upload {
+            id: 6,
+            name: "game-1.1.zip",
+            bytes: v2,
+        },
+    ]);
+    let s = setup("install-update", &server.base, false, true);
+    s.app
+        .update_settings(&SettingsPatch {
+            keep_installers: Some(true),
+            ..Default::default()
+        })
+        .unwrap();
+    s.app.start_downloads().unwrap();
+    let first = s.app.enqueue_download(Store::Itch, "11", "5").unwrap();
+    s.events.install_state(first.id, "installed");
+    let dir = s.library().join("Celeste");
+    std::fs::write(dir.join("save.dat"), b"progress").unwrap();
+
+    let second = s.app.enqueue_download(Store::Itch, "11", "6").unwrap();
+    s.events.install_state(second.id, "installed");
+    assert_eq!(std::fs::read(dir.join("Game.exe")).unwrap(), b"v2");
+    assert_eq!(std::fs::read(dir.join("new.pak")).unwrap(), b"new");
+    assert_eq!(std::fs::read(dir.join("save.dat")).unwrap(), b"progress");
+    assert!(!s.library().join("Celeste (2)").exists());
+    assert!(
+        Path::new(&second.dir).join("game-1.1.zip").exists(),
+        "installers are kept when asked"
+    );
+    assert_eq!(s.app.installs().unwrap().len(), 1);
+}
+
+#[test]
+fn what_cannot_be_installed_is_left_for_the_user() {
+    let mut rar = b"Rar!\x1A\x07\x00".to_vec();
+    rar.extend(data(2000, 3));
+    let mut nsis = b"MZ".to_vec();
+    nsis.resize(4096, 0);
+    nsis.extend_from_slice(b"NullsoftInst");
+    let full = zip_bytes(&[("Game/game.x86_64", b"x")]);
+    let broken = full[..full.len() - 30].to_vec();
+    let server = itch_fake(vec![
+        Upload {
+            id: 5,
+            name: "game.rar",
+            bytes: rar,
+        },
+        Upload {
+            id: 6,
+            name: "game-setup.exe",
+            bytes: nsis,
+        },
+        Upload {
+            id: 7,
+            name: "broken.zip",
+            bytes: broken,
+        },
+    ]);
+    let s = setup("install-manual", &server.base, false, true);
+    s.app.start_downloads().unwrap();
+
+    let rar = s.app.enqueue_download(Store::Itch, "11", "5").unwrap();
+    let manual = s.events.install_state(rar.id, "manual");
+    assert_eq!(manual["installKind"], "rar");
+    assert!(
+        Path::new(&rar.dir).join("game.rar").exists(),
+        "kept for the user"
+    );
+
+    // Someone else's installer waits for approval on Windows; elsewhere it cannot run at all.
+    let setup_exe = s.app.enqueue_download(Store::Itch, "11", "6").unwrap();
+    let state = if cfg!(windows) { "confirm" } else { "manual" };
+    let waiting = s.events.install_state(setup_exe.id, state);
+    assert_eq!(waiting["installKind"], "nsis");
+
+    let broken = s.app.enqueue_download(Store::Itch, "11", "7").unwrap();
+    let failed = s.events.install_state(broken.id, "failed");
+    assert_eq!(
+        failed["installError"]["message"], "archive_corrupt",
+        "{failed}"
+    );
+    assert!(s.app.installs().unwrap().is_empty());
+    // Retrying runs it again (and fails again).
+    s.app.retry_install(broken.id).unwrap();
+    s.events.wait("second failure", |e, p| {
+        e == EVENT_STATE && p["id"] == broken.id && p["installState"] == "installing"
+    });
+    let list = s.app.downloads().unwrap();
+    assert!(
+        list.items
+            .iter()
+            .all(|d| d.state == DownloadState::Completed)
+    );
+    assert!(
+        matches!(s.app.approve_install(rar.id), Ok(())),
+        "approving a manual one does nothing"
+    );
+    let rar_now = list.items.iter().find(|d| d.id == rar.id).unwrap();
+    assert_eq!(rar_now.install_state, Some(InstallState::Manual));
+}
+
+#[cfg(not(windows))]
+#[test]
+fn gog_windows_installers_are_not_run_elsewhere() {
+    let mut files = witcher_files();
+    let mut setup_exe = b"MZ".to_vec();
+    setup_exe.resize(8192, 0);
+    setup_exe.extend_from_slice(b"Inno Setup Setup Data (6.2.2)");
+    files[0].bytes = setup_exe;
+    files[0].md5 = md5_hex(&files[0].bytes);
+    let fake = gog_fake(files, |req, f, _| serve_file(req, &f.bytes));
+    let s = setup("install-gog", &fake.server.base, true, false);
+    s.app.start_downloads().unwrap();
+    let d = s
+        .app
+        .enqueue_download(Store::Gog, WITCHER, "installer_windows_en")
+        .unwrap();
+    let manual = s.events.install_state(d.id, "manual");
+    assert_eq!(manual["installKind"], "inno_setup");
+    assert!(Path::new(&d.dir).join("setup_witcher.exe").exists());
 }

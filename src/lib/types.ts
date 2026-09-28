@@ -383,6 +383,11 @@ export interface Download {
   error: CmdError | null;
   createdAt: number;
   finishedAt: number | null;
+  /** Installing the finished download; null for downloads from before installs existed. */
+  installState: InstallState | null;
+  /** What the file turned out to be ("inno_setup", "zip", "rar", …). */
+  installKind: string | null;
+  installError: CmdError | null;
 }
 
 /** Live progress of the running download (`download:progress`). */
@@ -401,10 +406,53 @@ export interface DownloadList {
   /** Newest first. */
   items: Download[];
   live: DownloadProgress | null;
+  /** The running install's progress. */
+  installing: InstallProgress | null;
 }
 
 /** `download:state` payload when a download was removed. */
 export interface DownloadRemoved {
   id: number;
   removed: true;
+}
+
+// --- installs ---------------------------------------------------------------------------------
+
+export type InstallState = "waiting" | "installing" | "installed" | "failed" | "confirm" | "approved" | "manual";
+export type InstallMethod = "gog" | "archive" | "portable" | "installer" | "galaxy";
+
+export interface Installed {
+  store: Store;
+  productId: string;
+  appid: number | null;
+  title: string;
+  /** Install folder, when known. */
+  dir: string | null;
+  /** What "Oyna" starts; null until one is chosen. */
+  exe: string | null;
+  args: string;
+  workdir: string | null;
+  method: InstallMethod;
+  /** Other programs in the folder that could be the game. */
+  candidates: string[];
+  optionLabel: string | null;
+  installedAt: number;
+  /** Installed outside GameLib (GOG Galaxy). */
+  external: boolean;
+  /** The matched Steam game's header image. */
+  steamHeader: string | null;
+}
+
+/** `install:progress` payload. */
+export interface InstallProgress {
+  downloadId: number;
+  stage: "checking" | "unpacking" | "installing" | "cleaning";
+  done: number;
+  total: number;
+}
+
+/** `install:changed` payload. */
+export interface InstallChanged {
+  store: Store;
+  productId: string;
 }

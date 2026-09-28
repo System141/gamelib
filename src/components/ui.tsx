@@ -33,3 +33,33 @@ export function SmallButton({
     </button>
   );
 }
+
+/** A small square button with only an icon; `label` is its tooltip and accessible name. */
+export function IconButton({
+  label,
+  icon,
+  onClick,
+  tone = "default",
+}: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  tone?: "default" | "danger";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className={clsx(
+        "grid size-7 place-items-center rounded-md ring-1 transition",
+        tone === "danger"
+          ? "text-danger ring-danger/30 hover:bg-danger/15"
+          : "bg-white/4 text-ink-200 ring-white/8 hover:bg-white/10 hover:text-white",
+      )}
+    >
+      {icon}
+    </button>
+  );
+}

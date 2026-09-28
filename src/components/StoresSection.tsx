@@ -11,6 +11,7 @@ import { useAccounts, useLinkStoreProduct, useSetMatchState, useStatus, useStore
 import { StoreMark } from "./badges";
 import { AppleIcon, LinuxIcon, WindowsIcon } from "./icons";
 import { DownloadButton, DownloadLine, useProductDownload } from "./DownloadPicker";
+import { InstallMenu, PlayButton, useGameInstall } from "./InstallActions";
 import { SmallButton } from "./ui";
 
 interface Props {
@@ -156,8 +157,10 @@ function useVerdict(appid: number) {
 function MatchRow({ match, appid }: { match: StoreMatch; appid: number }) {
   const verdict = useVerdict(appid);
   const accounts = useAccounts();
-  const { download, live } = useProductDownload(match.store, match.productId);
-  const canDownload = !!accounts.data?.[match.store] && (match.owned || (match.store === "itch" && match.isFree));
+  const { download, live, installing } = useProductDownload(match.store, match.productId);
+  const installed = useGameInstall(match.store, match.productId);
+  const canDownload = !installed && !!accounts.data?.[match.store] && (match.owned || (match.store === "itch" && match.isFree));
+  const showDownload = download && !(installed && download.state === "completed" && download.installState !== "installing");
   const image = match.coverWide ?? match.cover;
   const open = () =>
     api.openStorePage(match.store, match.productId).catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
@@ -196,10 +199,12 @@ function MatchRow({ match, appid }: { match: StoreMatch; appid: number }) {
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           <span className="flex gap-1.5">
+            {installed && <PlayButton installed={installed} />}
             {canDownload && !download && <DownloadButton store={match.store} productId={match.productId} title={match.title} />}
-            <SmallButton tone={canDownload ? "default" : "primary"} onClick={open} icon={<ExternalLink size={13} />}>
+            <SmallButton tone={canDownload || installed ? "default" : "primary"} onClick={open} icon={<ExternalLink size={13} />}>
               {tr.stores.openIn[match.store]}
             </SmallButton>
+            {installed && <InstallMenu installed={installed} placement="down" />}
           </span>
           {byTitle ? (
             <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-400">
@@ -218,9 +223,9 @@ function MatchRow({ match, appid }: { match: StoreMatch; appid: number }) {
           )}
         </div>
       </div>
-      {download && (
+      {showDownload && (
         <div className="mt-3 border-t border-white/6 pt-2.5">
-          <DownloadLine download={download} live={live} />
+          <DownloadLine download={download} live={live} installing={installing} />
         </div>
       )}
     </div>

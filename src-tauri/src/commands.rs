@@ -6,8 +6,8 @@ use std::sync::Arc;
 use gamelib_core::app::{App, steam_url};
 use gamelib_core::model::{
     Accounts, AppStatus, Download, DownloadList, FileOption, GameDetail, GameLink, GameMedia,
-    GamePage, GameQuery, LibraryItem, LinkCheck, LinkInput, MatchState, OpenTarget, Settings,
-    SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, TagInfo,
+    GamePage, GameQuery, Installed, LibraryItem, LinkCheck, LinkInput, MatchState, OpenTarget,
+    Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, TagInfo,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -320,6 +320,111 @@ pub async fn open_download_folder(
         .opener()
         .open_path(dir.display().to_string(), None::<&str>)
         .map_err(|e| CmdError::other(e.to_string()))
+}
+
+/// Lets someone else's installer (an itch.io upload) run.
+#[tauri::command]
+pub async fn approve_install(app: State<'_, Arc<App>>, id: i64) -> CmdResult<()> {
+    blocking(&app, move |app| app.approve_install(id)).await
+}
+
+#[tauri::command]
+pub async fn retry_install(app: State<'_, Arc<App>>, id: i64) -> CmdResult<()> {
+    blocking(&app, move |app| app.retry_install(id)).await
+}
+
+// --- installed games ------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_installs(app: State<'_, Arc<App>>) -> CmdResult<Vec<Installed>> {
+    blocking(&app, App::installs).await
+}
+
+#[tauri::command]
+pub async fn launch_game(
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+) -> CmdResult<()> {
+    blocking(&app, move |app| app.launch_game(store, &product_id)).await
+}
+
+/// Runs the game's uninstaller (or deletes the folder GameLib unpacked it into).
+#[tauri::command]
+pub async fn uninstall_game(
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+) -> CmdResult<()> {
+    blocking(&app, move |app| app.uninstall_game(store, &product_id)).await
+}
+
+#[tauri::command]
+pub async fn open_install_folder(
+    handle: AppHandle,
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+) -> CmdResult<()> {
+    let dir = blocking(&app, move |app| app.install_folder(store, &product_id)).await?;
+    handle
+        .opener()
+        .open_path(dir.display().to_string(), None::<&str>)
+        .map_err(|e| CmdError::other(e.to_string()))
+}
+
+#[tauri::command]
+pub async fn set_launch_target(
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+    exe: String,
+) -> CmdResult<Installed> {
+    blocking(&app, move |app| {
+        app.set_launch_target(store, &product_id, &exe)
+    })
+    .await
+}
+
+/// Lets the user pick what "Oyna" starts; `None` if the dialog was cancelled.
+#[tauri::command]
+pub async fn pick_launch_target(
+    handle: AppHandle,
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+) -> CmdResult<Option<Installed>> {
+    let id = product_id.clone();
+    let start = blocking(&app, move |app| {
+        Ok(app.install_folder(store, &id).ok().unwrap_or_else(|| {
+            std::path::PathBuf::from(app.settings().map(|s| s.library_dir).unwrap_or_default())
+        }))
+    })
+    .await?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut dialog = handle
+        .dialog()
+        .file()
+        .set_title("Başlatılacak dosya")
+        .set_directory(&start);
+    if cfg!(windows) {
+        dialog = dialog.add_filter("Programlar", &["exe", "bat", "cmd", "lnk"]);
+    }
+    dialog.pick_file(move |picked| {
+        let _ = tx.send(picked);
+    });
+    let picked = tauri::async_runtime::spawn_blocking(move || rx.recv().ok().flatten())
+        .await
+        .map_err(|e| CmdError::other(e.to_string()))?;
+    let Some(exe) = picked.and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let exe = exe.display().to_string();
+    blocking(&app, move |app| {
+        app.set_launch_target(store, &product_id, &exe)
+    })
+    .await
+    .map(Some)
 }
 
 // --- external links -------------------------------------------------------------------------

@@ -1,16 +1,17 @@
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, Download, ExternalLink, ImageOff, TriangleAlert, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, ImageOff, Play, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
 import { formatDate, formatPercent, formatRelative, isRecent } from "../lib/format";
 import { showToast } from "../lib/toast";
 import type { GameDetail, Screenshot } from "../lib/types";
-import { useGame, useGameMedia } from "../hooks/useData";
+import { useGame, useGameMedia, useInstalls } from "../hooks/useData";
 import { DeckBadge, PlatformIcons, PriceTag, ReviewBadge } from "./badges";
 import { GameArt } from "./GameArt";
 import { SteamIcon } from "./icons";
 import { LinksSection } from "./LinksSection";
+import { useInstallActions } from "./InstallActions";
 import { StoresSection } from "./StoresSection";
 
 /** Descriptors whose "mature" screenshots stay hidden unless adult content is enabled. */
@@ -160,6 +161,7 @@ function Detail({
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <PriceTag game={game} size="lg" />
+            <PlayInstalled appid={game.appid} />
             <button
               type="button"
               onClick={() => openSteam("web")}
@@ -402,5 +404,24 @@ function DetailSkeleton() {
         <div className="shimmer h-4 w-3/4 rounded" />
       </div>
     </div>
+  );
+}
+
+/** "Oyna" for a game installed from another store. */
+function PlayInstalled({ appid }: { appid: number }) {
+  const installs = useInstalls();
+  const act = useInstallActions();
+  const game = installs.data?.find((i) => i.appid === appid && i.exe);
+  if (!game) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => void act.play(game)}
+      title={`${tr.install.play} · ${tr.storeNames[game.store]}`}
+      className="inline-flex h-10 items-center gap-2 rounded-lg bg-success px-4 text-sm font-semibold text-ink-950 shadow-lg shadow-success/20 transition hover:brightness-110"
+    >
+      <Play size={16} fill="currentColor" />
+      {tr.install.play}
+    </button>
   );
 }

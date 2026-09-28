@@ -12,6 +12,8 @@ import type {
   DownloadList,
   DownloadProgress,
   FileOption,
+  Installed,
+  InstallProgress,
   GameCard,
   GameDetail,
   GameLink,
@@ -73,6 +75,9 @@ export class MockBackend {
   private settings: Settings = { libraryDir: "C:\\Users\\oyuncu\\Games", keepInstallers: false, autoUpdate: true };
   private downloads: Download[] = [];
   private live: DownloadProgress | null = null;
+  private installs: Installed[] = [];
+  private libraryPending = false;
+  private installing: InstallProgress | null = null;
   private nextDownloadId = 1;
   /** The simulated transfer's timer, while one runs. */
   private transfer: ReturnType<typeof setInterval> | null = null;
@@ -110,7 +115,14 @@ export class MockBackend {
     }
   }
 
+  /** Answers a command with a copy of the result, as IPC (which serializes) would: the UI
+   *  must never hold the mock's own objects, which change later. */
   async handle(cmd: string, args: Record<string, any>): Promise<unknown> {
+    const result = await this.dispatch(cmd, args);
+    return result === undefined ? result : structuredClone(result);
+  }
+
+  private async dispatch(cmd: string, args: Record<string, any>): Promise<unknown> {
     switch (cmd) {
       case "get_status":
         return this.status();
@@ -186,7 +198,32 @@ export class MockBackend {
       case "enqueue_download":
         return this.enqueue(args.store, args.productId, args.optionId);
       case "get_downloads":
-        return { items: this.downloads, live: this.live } satisfies DownloadList;
+        return { items: this.downloads, live: this.live, installing: this.installing } satisfies DownloadList;
+      case "approve_install":
+        return this.moveInstall(args.id, ["confirm"], "approved");
+      case "retry_install":
+        return this.moveInstall(args.id, [null, "failed"], "waiting");
+      case "get_installs":
+        return this.installs;
+      case "launch_game": {
+        const game = this.installs.find((i) => i.store === args.store && i.productId === args.productId);
+        if (!game) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+        if (!game.exe) throw invalid("launch_target");
+        console.info("[mock] launch", game.exe);
+        return null;
+      }
+      case "uninstall_game":
+        await sleep(900);
+        return this.uninstall(args.store, args.productId);
+      case "open_install_folder":
+        console.info(`[mock] ${cmd}`, args);
+        return null;
+      case "set_launch_target":
+        return this.setTarget(args.store, args.productId, args.exe);
+      case "pick_launch_target": {
+        const game = this.installs.find((i) => i.store === args.store && i.productId === args.productId);
+        return game ? this.setTarget(args.store, args.productId, `${game.dir ?? "C:\\Program Files\\Game"}\\Game.exe`) : null;
+      }
       case "pause_download":
         return this.pauseDownload(args.id);
       case "resume_download":
@@ -244,7 +281,8 @@ export class MockBackend {
 
   private signIn(store: Store, username: string): Accounts {
     this.accounts = { ...this.accounts, [store]: { username } };
-    void this.startWorker("library").catch(() => undefined);
+    // Like the app: when another job runs, the library is read once it ends.
+    void this.startWorker("library").catch(() => (this.libraryPending = true));
     return this.accounts;
   }
 
@@ -366,7 +404,7 @@ export class MockBackend {
     return [
       option("1", `${slug}-windows.zip`, "win", 812 * mb, { recommended: true }),
       option("2", `${slug}-linux.tar.gz`, "linux", 798 * mb),
-      option("3", "Demo", "win", 210 * mb, { demo: true }),
+      option("3", `${slug}-demo-setup.exe`, "win", 210 * mb, { demo: true }),
     ];
   }
 
@@ -409,6 +447,9 @@ export class MockBackend {
       error: null,
       createdAt: nowSeconds(),
       finishedAt: null,
+      installState: null,
+      installKind: null,
+      installError: null,
     };
     this.downloads = [download, ...this.downloads];
     this.emit("download:state", download);
@@ -474,8 +515,9 @@ export class MockBackend {
         this.emit("download:progress", this.live);
         if (verifying < 4) return;
         this.stopTransfer();
-        this.setDownload(d.id, { state: "completed", finishedAt: nowSeconds() });
+        this.setDownload(d.id, { state: "completed", finishedAt: nowSeconds(), installState: "waiting" });
         this.pump();
+        void this.install(d.id);
         return;
       }
       d.doneBytes = Math.min(d.totalBytes, d.doneBytes + Math.round(step * (0.8 + Math.random() * 0.4)));
@@ -490,6 +532,89 @@ export class MockBackend {
       };
       this.emit("download:progress", this.live);
     }, 250);
+  }
+
+  // --- installs --------------------------------------------------------------------------------
+
+  private moveInstall(id: number, from: (Download["installState"] | null)[], to: Download["installState"]): null {
+    const d = this.downloads.find((x) => x.id === id);
+    if (!d) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    if (d.state === "completed" && from.includes(d.installState)) {
+      this.setDownload(id, { installState: to, installError: null });
+      void this.install(id);
+    }
+    return null;
+  }
+
+  /** GOG installers run (no progress), zips unpack, someone else's installer asks first. */
+  private async install(id: number) {
+    const d = this.downloads.find((x) => x.id === id);
+    if (!d || (d.installState !== "waiting" && d.installState !== "approved")) return;
+    const setup = d.optionLabel?.endsWith("setup.exe") ?? false;
+    if (setup && d.installState !== "approved") {
+      this.setDownload(id, { installState: "confirm", installKind: "nsis" });
+      return;
+    }
+    const kind = d.store === "gog" ? "inno_setup" : setup ? "nsis" : "zip";
+    this.setDownload(id, { installState: "installing", installKind: kind });
+    const report = (stage: InstallProgress["stage"], done: number, total: number) => {
+      this.installing = { downloadId: id, stage, done, total };
+      this.emit("install:progress", this.installing);
+    };
+    report("checking", 0, 0);
+    await sleep(500);
+    if (kind === "zip") {
+      for (let i = 1; i <= 10; i += 1) {
+        report("unpacking", (d.totalBytes * i) / 10, d.totalBytes);
+        await sleep(200);
+      }
+    } else {
+      report("installing", 0, 0);
+      await sleep(2500);
+    }
+    this.installing = null;
+    if (!this.downloads.some((x) => x.id === id)) return;
+    const dir = `${this.settings.libraryDir}\\${d.title.replace(/[<>:"/\\|?*]/g, "_")}`;
+    const exe = `${dir}\\${d.store === "gog" ? "bin\\game.exe" : "Game.exe"}`;
+    const game: Installed = {
+      store: d.store,
+      productId: d.productId,
+      appid: d.appid,
+      title: d.title,
+      dir,
+      exe,
+      args: "",
+      workdir: null,
+      method: d.store === "gog" ? "gog" : setup ? "installer" : "archive",
+      candidates: [exe, `${dir}\\Launcher.exe`],
+      optionLabel: d.optionLabel,
+      installedAt: nowSeconds(),
+      external: false,
+      steamHeader: d.appid != null ? (this.all.find((g) => g.appid === d.appid)?.header ?? null) : null,
+    };
+    this.installs = [...this.installs.filter((i) => !(i.store === d.store && i.productId === d.productId)), game];
+    this.emit("install:changed", { store: d.store, productId: d.productId });
+    this.setDownload(id, { installState: "installed" });
+  }
+
+  private uninstall(store: Store, productId: string): null {
+    const before = this.installs.length;
+    this.installs = this.installs.filter((i) => !(i.store === store && i.productId === productId));
+    if (this.installs.length === before) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    for (const d of this.downloads) {
+      if (d.store === store && d.productId === productId && d.installState === "installed") d.installState = null;
+    }
+    this.emit("install:changed", { store, productId });
+    return null;
+  }
+
+  private setTarget(store: Store, productId: string, exe: string): Installed {
+    const game = this.installs.find((i) => i.store === store && i.productId === productId);
+    if (!game) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    if (!/^([a-z]:\\|\/)/i.test(exe)) throw invalid("launch_target");
+    Object.assign(game, { exe, args: "", workdir: null });
+    this.emit("install:changed", { store, productId });
+    return { ...game };
   }
 
   private searchStore(appid: number): StoreSearchHit[] {
@@ -644,6 +769,10 @@ export class MockBackend {
     this.worker = null;
     this.progress = null;
     this.emit("sync:finished", finished);
+    if (this.libraryPending) {
+      this.libraryPending = false;
+      void this.startWorker("library").catch(() => undefined);
+    }
   }
 
   private async simulateFull() {

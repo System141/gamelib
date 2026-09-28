@@ -22,6 +22,10 @@ pub enum Error {
     /// Invalid user input. The payload is a stable code (e.g. `url_scheme`) the UI maps to text.
     #[error("invalid input: {0}")]
     Invalid(&'static str),
+    /// A failure the UI explains by its stable code, with a detail such as an exit code. Reaches
+    /// the UI as `invalid` with the message `code:detail`.
+    #[error("{0}: {1}")]
+    Failed(&'static str, String),
     #[error("not found")]
     NotFound,
     /// A catalog job is already running (in this process or another one using the same database).
@@ -58,7 +62,7 @@ impl Error {
             Error::Parse(_) => ErrorKind::Parse,
             Error::Database(_) => ErrorKind::Database,
             Error::Cancelled => ErrorKind::Cancelled,
-            Error::Invalid(_) => ErrorKind::Invalid,
+            Error::Invalid(_) | Error::Failed(..) => ErrorKind::Invalid,
             Error::NotFound => ErrorKind::NotFound,
             Error::Busy => ErrorKind::Busy,
             Error::Other(_) => ErrorKind::Other,
@@ -96,6 +100,7 @@ impl From<Error> for ErrorInfo {
     fn from(e: Error) -> Self {
         let message = match &e {
             Error::Invalid(code) => (*code).to_owned(),
+            Error::Failed(code, detail) => format!("{code}:{detail}"),
             other => other.to_string(),
         };
         Self {

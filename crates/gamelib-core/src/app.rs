@@ -17,12 +17,14 @@ use crate::db::write::{get_meta, set_meta};
 use crate::db::{Db, links, read, stores as store_db};
 use crate::downloads::{DownloadManager, sources};
 use crate::http::{self, Counters, Pacer};
+use crate::install::{self, InstallManager};
 use crate::links::{SiteRegistry, resolve, validate};
 use crate::model::{
     Account, Accounts, AppStatus, Download, DownloadList, FileOption, GameDetail, GameLink,
-    GameMedia, GamePage, GameQuery, LibraryItem, LibraryReport, LinkCheck, LinkInput, MatchState,
-    NewReleasesReport, OpenTarget, Outcome, Settings, SettingsPatch, SiteInfo, Store, StoreMatch,
-    StoreSearchHit, StoresReport, SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
+    GameMedia, GamePage, GameQuery, Installed, LibraryItem, LibraryReport, LinkCheck, LinkInput,
+    MatchState, NewReleasesReport, OpenTarget, Outcome, Settings, SettingsPatch, SiteInfo, Store,
+    StoreMatch, StoreSearchHit, StoresReport, SyncFinished, SyncProgress, SyncReport, TagInfo,
+    WorkerKind,
 };
 use crate::new_releases::{NewReleasesOptions, fetch_new_releases};
 use crate::secrets::{ItchKey, SecretStore};
@@ -86,6 +88,18 @@ struct JobSlot {
     kind: Mutex<Option<WorkerKind>>,
     /// Latest progress, so a reloaded UI can catch up without waiting for the next event.
     last_progress: Mutex<Option<SyncProgress>>,
+    /// Someone signed in while another job ran: read the libraries once it ends.
+    library_pending: AtomicBool,
+}
+
+/// What starting a job needs, shared with running jobs so one can start the next.
+struct Jobs {
+    slot: JobSlot,
+    db_path: PathBuf,
+    sink: Arc<dyn EventSink>,
+    source: Arc<SourceFactory>,
+    stores: StoreSyncOptions,
+    secrets: Arc<SecretStore>,
 }
 
 enum JobReport {
@@ -104,9 +118,11 @@ pub struct App {
     sites: SiteRegistry,
     /// Store account credentials, next to the database.
     secrets: Arc<SecretStore>,
-    job: Arc<JobSlot>,
+    jobs: Arc<Jobs>,
     /// The download queue; its worker runs only once [`App::start_downloads`] is called.
     downloads: DownloadManager,
+    /// Installs finished downloads, on a thread of its own (also started by `start_downloads`).
+    installs: InstallManager,
     sink: Arc<dyn EventSink>,
     options: JobOptions,
 }
@@ -131,20 +147,31 @@ impl App {
             .filter(|d| !d.as_os_str().is_empty())
             .unwrap_or(Path::new("."));
         let secrets = Arc::new(SecretStore::new(dir));
+        let installs = InstallManager::new(db_path.clone(), sink.clone());
         let downloads = DownloadManager::new(
             db_path.clone(),
             sink.clone(),
             secrets.clone(),
             options.stores.clone(),
+            installs.notifier(),
         );
+        let jobs = Arc::new(Jobs {
+            slot: JobSlot::default(),
+            db_path: db_path.clone(),
+            sink: sink.clone(),
+            source: options.source.clone(),
+            stores: options.stores.clone(),
+            secrets: secrets.clone(),
+        });
         Ok(Self {
             db_path,
             reader: Mutex::new(reader),
             writer: Mutex::new(writer),
             sites: SiteRegistry::with_builtin_sites(),
             secrets,
-            job: Arc::default(),
+            jobs,
             downloads,
+            installs,
             sink,
             options,
         })
@@ -158,9 +185,9 @@ impl App {
 
     pub fn status(&self) -> Result<AppStatus> {
         let catalog = read::status(&mut lock(&self.reader))?;
-        let worker = *lock(&self.job.kind);
+        let worker = *lock(&self.jobs.slot.kind);
         let progress = match worker {
-            Some(_) => lock(&self.job.last_progress).clone(),
+            Some(_) => lock(&self.jobs.slot.last_progress).clone(),
             None => None,
         };
         Ok(AppStatus {
@@ -212,16 +239,12 @@ impl App {
 
     /// Starts reading the signed-in accounts' libraries in the background.
     pub fn start_library_sync(&self) -> Result<()> {
-        let opts = self.options.stores.clone();
-        let secrets = self.secrets.clone();
-        self.spawn_job(WorkerKind::Library, move |db, _, cancel, progress| {
-            library::run_library_sync(db, &secrets, &opts, cancel, progress).map(JobReport::Library)
-        })
+        self.spawn_job(WorkerKind::Library, library_job(&self.jobs))
     }
 
     /// Asks the running job to stop; it then finishes with the `cancelled` outcome.
     pub fn cancel_job(&self) {
-        self.job.cancel.store(true, Ordering::Relaxed);
+        self.jobs.slot.cancel.store(true, Ordering::Relaxed);
     }
 
     pub fn query_games(&self, params: &GameQuery) -> Result<GamePage> {
@@ -461,8 +484,17 @@ impl App {
     }
 
     fn after_sign_in(&self) {
-        // Another job may be running; the next store sync reads the library then.
-        let _ = self.start_library_sync();
+        if let Err(Error::Busy) = self.start_library_sync() {
+            // Another job runs: it starts the library job when it ends.
+            self.jobs.slot.library_pending.store(true, Ordering::SeqCst);
+            // Unless it ended just now, before seeing the flag.
+            if self.start_library_sync().is_ok() {
+                self.jobs
+                    .slot
+                    .library_pending
+                    .store(false, Ordering::SeqCst);
+            }
+        }
     }
 
     /// The user's games on the signed-in stores.
@@ -473,17 +505,7 @@ impl App {
     // --- settings -----------------------------------------------------------------------------
 
     pub fn settings(&self) -> Result<Settings> {
-        let reader = lock(&self.reader);
-        let conn = reader.conn();
-        let flag = |key: &str, default: bool| -> Result<bool> {
-            Ok(get_meta(conn, key)?.map_or(default, |v| v == "1"))
-        };
-        Ok(Settings {
-            library_dir: get_meta(conn, settings_keys::LIBRARY_DIR)?
-                .unwrap_or_else(default_library_dir),
-            keep_installers: flag(settings_keys::KEEP_INSTALLERS, false)?,
-            auto_update: flag(settings_keys::AUTO_UPDATE, true)?,
-        })
+        read_settings(lock(&self.reader).conn())
     }
 
     pub fn update_settings(&self, patch: &SettingsPatch) -> Result<Settings> {
@@ -509,10 +531,12 @@ impl App {
 
     // --- downloads ----------------------------------------------------------------------------
 
-    /// Starts the download worker, which continues downloads interrupted by the last exit. Only
-    /// the desktop app downloads; the preview server never calls this.
+    /// Starts the download and install workers, which continue what the last exit
+    /// interrupted. Only the desktop app downloads; the preview server never calls this.
     pub fn start_downloads(&self) -> Result<()> {
-        self.downloads.start(lock(&self.writer).conn())
+        let writer = lock(&self.writer);
+        self.installs.start(writer.conn())?;
+        self.downloads.start(writer.conn())
     }
 
     /// What can be downloaded for a store product, the best variant for this computer first.
@@ -574,6 +598,7 @@ impl App {
         Ok(DownloadList {
             items: self.downloads.list(lock(&self.reader).conn())?,
             live: self.downloads.live(),
+            installing: self.installs.live(),
         })
     }
 
@@ -603,6 +628,62 @@ impl App {
         } else {
             Err(Error::NotFound)
         }
+    }
+
+    /// Lets someone else's installer (an itch.io upload) run.
+    pub fn approve_install(&self, download_id: i64) -> Result<()> {
+        self.installs
+            .approve(lock(&self.writer).conn(), download_id)
+    }
+
+    /// Installs a finished download again after a failure (or one from before installs).
+    pub fn retry_install(&self, download_id: i64) -> Result<()> {
+        self.installs.retry(lock(&self.writer).conn(), download_id)
+    }
+
+    // --- installed games ------------------------------------------------------------------------
+
+    pub fn installs(&self) -> Result<Vec<Installed>> {
+        install::list(lock(&self.reader).conn())
+    }
+
+    pub fn launch_game(&self, store: Store, product_id: &str) -> Result<()> {
+        install::launch(lock(&self.reader).conn(), store, product_id)
+    }
+
+    pub fn install_folder(&self, store: Store, product_id: &str) -> Result<PathBuf> {
+        install::folder(lock(&self.reader).conn(), store, product_id)
+    }
+
+    /// Chooses what "Oyna" starts.
+    pub fn set_launch_target(
+        &self,
+        store: Store,
+        product_id: &str,
+        exe: &str,
+    ) -> Result<Installed> {
+        let installed =
+            install::set_launch_target(lock(&self.writer).conn(), store, product_id, exe)?;
+        self.install_changed(store, product_id);
+        Ok(installed)
+    }
+
+    /// Uninstalls a game (see [`install::remove`]). An uninstaller may ask for administrator
+    /// rights and take a while; no connection is held meanwhile.
+    pub fn uninstall_game(&self, store: Store, product_id: &str) -> Result<()> {
+        let removal = install::removal(lock(&self.reader).conn(), store, product_id)?;
+        let library = PathBuf::from(self.settings()?.library_dir);
+        install::remove(&removal, &library)?;
+        install::forget(lock(&self.writer).conn(), store, product_id)?;
+        self.install_changed(store, product_id);
+        Ok(())
+    }
+
+    fn install_changed(&self, store: Store, product_id: &str) {
+        self.sink.emit(
+            install::EVENT_CHANGED,
+            serde_json::json!({ "store": store, "productId": product_id }),
+        );
     }
 
     // --- external links ---------------------------------------------------------------------
@@ -649,8 +730,6 @@ impl App {
 
     // --- jobs -------------------------------------------------------------------------------
 
-    /// Runs a catalog job on its own thread with its own connection, streaming progress events
-    /// and ending with exactly one `sync:finished` event, also when the job fails or panics.
     fn spawn_job<F>(&self, kind: WorkerKind, job: F) -> Result<()>
     where
         F: FnOnce(
@@ -662,58 +741,102 @@ impl App {
             + Send
             + 'static,
     {
-        let slot = self.job.clone();
-        if slot.running.swap(true, Ordering::SeqCst) {
-            return Err(Error::Busy);
-        }
-        let file_lock = match JobLock::acquire(&self.db_path) {
-            Ok(file_lock) => file_lock,
-            Err(e) => {
-                slot.running.store(false, Ordering::SeqCst);
-                return Err(e);
-            }
-        };
-        slot.cancel.store(false, Ordering::Relaxed);
-        *lock(&slot.kind) = Some(kind);
-        *lock(&slot.last_progress) = None;
-
-        let db_path = self.db_path.clone();
-        let sink = self.sink.clone();
-        let source = self.options.source.clone();
-        let thread_slot = slot.clone();
-        let spawned = std::thread::Builder::new()
-            .name("gamelib-job".into())
-            .spawn(move || {
-                let slot = thread_slot;
-                let result = catch_unwind(AssertUnwindSafe(|| {
-                    let mut db = Db::open(&db_path)?;
-                    let mut on_progress = |p: &SyncProgress| {
-                        *lock(&slot.last_progress) = Some(p.clone());
-                        sink.emit(EVENT_PROGRESS, to_json(p));
-                    };
-                    job(&mut db, source.as_ref(), &slot.cancel, &mut on_progress)
-                }))
-                .unwrap_or_else(|panic| {
-                    Err(Error::Other(format!(
-                        "catalog job panicked: {}",
-                        panic_message(panic.as_ref())
-                    )))
-                });
-                let finished = finished_event(kind, result);
-                // Free the slot before announcing the end, so the UI can start the next job.
-                *lock(&slot.kind) = None;
-                *lock(&slot.last_progress) = None;
-                drop(file_lock);
-                slot.running.store(false, Ordering::SeqCst);
-                sink.emit(EVENT_FINISHED, to_json(&finished));
-            });
-
-        spawned.map(drop).map_err(|e| {
-            *lock(&slot.kind) = None;
-            slot.running.store(false, Ordering::SeqCst);
-            Error::Other(format!("could not start the job thread: {e}"))
-        })
+        spawn_job(&self.jobs, kind, job)
     }
+}
+
+/// What a job runs on its thread: given its own connection, the Steam source, the cancel flag
+/// and a progress callback.
+type Job = Box<
+    dyn FnOnce(
+            &mut Db,
+            &SourceFactory,
+            &AtomicBool,
+            &mut dyn FnMut(&SyncProgress),
+        ) -> Result<JobReport>
+        + Send,
+>;
+
+/// The library job: reads the signed-in accounts' libraries.
+fn library_job(jobs: &Jobs) -> Job {
+    let opts = jobs.stores.clone();
+    let secrets = jobs.secrets.clone();
+    Box::new(move |db, _, cancel, progress| {
+        library::run_library_sync(db, &secrets, &opts, cancel, progress).map(JobReport::Library)
+    })
+}
+
+/// Runs a catalog job on its own thread with its own connection, streaming progress events
+/// and ending with exactly one `sync:finished` event, also when the job fails or panics. A
+/// library read asked for meanwhile starts right after.
+fn spawn_job<F>(jobs: &Arc<Jobs>, kind: WorkerKind, job: F) -> Result<()>
+where
+    F: FnOnce(
+            &mut Db,
+            &SourceFactory,
+            &AtomicBool,
+            &mut dyn FnMut(&SyncProgress),
+        ) -> Result<JobReport>
+        + Send
+        + 'static,
+{
+    let slot = &jobs.slot;
+    if slot.running.swap(true, Ordering::SeqCst) {
+        return Err(Error::Busy);
+    }
+    let file_lock = match JobLock::acquire(&jobs.db_path) {
+        Ok(file_lock) => file_lock,
+        Err(e) => {
+            slot.running.store(false, Ordering::SeqCst);
+            return Err(e);
+        }
+    };
+    slot.cancel.store(false, Ordering::Relaxed);
+    *lock(&slot.kind) = Some(kind);
+    *lock(&slot.last_progress) = None;
+
+    let thread_jobs = jobs.clone();
+    let spawned = std::thread::Builder::new()
+        .name("gamelib-job".into())
+        .spawn(move || {
+            let jobs = thread_jobs;
+            let slot = &jobs.slot;
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                let mut db = Db::open(&jobs.db_path)?;
+                let mut on_progress = |p: &SyncProgress| {
+                    *lock(&slot.last_progress) = Some(p.clone());
+                    jobs.sink.emit(EVENT_PROGRESS, to_json(p));
+                };
+                job(
+                    &mut db,
+                    jobs.source.as_ref(),
+                    &slot.cancel,
+                    &mut on_progress,
+                )
+            }))
+            .unwrap_or_else(|panic| {
+                Err(Error::Other(format!(
+                    "catalog job panicked: {}",
+                    panic_message(panic.as_ref())
+                )))
+            });
+            let finished = finished_event(kind, result);
+            // Free the slot before announcing the end, so the UI can start the next job.
+            *lock(&slot.kind) = None;
+            *lock(&slot.last_progress) = None;
+            drop(file_lock);
+            slot.running.store(false, Ordering::SeqCst);
+            jobs.sink.emit(EVENT_FINISHED, to_json(&finished));
+            if slot.library_pending.swap(false, Ordering::SeqCst) {
+                let _ = spawn_job(&jobs, WorkerKind::Library, library_job(&jobs));
+            }
+        });
+
+    spawned.map(drop).map_err(|e| {
+        *lock(&slot.kind) = None;
+        slot.running.store(false, Ordering::SeqCst);
+        Error::Other(format!("could not start the job thread: {e}"))
+    })
 }
 
 /// Store page of a game, on the web or in the Steam client.
@@ -723,6 +846,19 @@ pub fn steam_url(appid: u32, target: OpenTarget) -> String {
         OpenTarget::Client => format!("steam://store/{appid}"),
         OpenTarget::Install => format!("steam://install/{appid}"),
     }
+}
+
+/// The user's settings, with defaults for what was never set.
+pub(crate) fn read_settings(conn: &rusqlite::Connection) -> Result<Settings> {
+    let flag = |key: &str, default: bool| -> Result<bool> {
+        Ok(get_meta(conn, key)?.map_or(default, |v| v == "1"))
+    };
+    Ok(Settings {
+        library_dir: get_meta(conn, settings_keys::LIBRARY_DIR)?
+            .unwrap_or_else(default_library_dir),
+        keep_installers: flag(settings_keys::KEEP_INSTALLERS, false)?,
+        auto_update: flag(settings_keys::AUTO_UPDATE, true)?,
+    })
 }
 
 /// `~/Games` (e.g. `C:\\Users\\<user>\\Games`).

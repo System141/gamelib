@@ -9,6 +9,9 @@ import type {
   DownloadProgress,
   DownloadRemoved,
   FileOption,
+  InstallChanged,
+  Installed,
+  InstallProgress,
   GameDetail,
   GameLink,
   GameMedia,
@@ -73,6 +76,16 @@ export const api = {
   removeDownload: (id: number) => invoke<void>("remove_download", { id }),
   clearFinishedDownloads: () => invoke<void>("clear_finished_downloads"),
   openDownloadFolder: (id: number) => invoke<void>("open_download_folder", { id }),
+  /** Lets someone else's installer (an itch.io upload) run. */
+  approveInstall: (id: number) => invoke<void>("approve_install", { id }),
+  retryInstall: (id: number) => invoke<void>("retry_install", { id }),
+  getInstalls: () => invoke<Installed[]>("get_installs"),
+  launchGame: (store: Store, productId: string) => invoke<void>("launch_game", { store, productId }),
+  uninstallGame: (store: Store, productId: string) => invoke<void>("uninstall_game", { store, productId }),
+  openInstallFolder: (store: Store, productId: string) => invoke<void>("open_install_folder", { store, productId }),
+  setLaunchTarget: (store: Store, productId: string, exe: string) => invoke<Installed>("set_launch_target", { store, productId, exe }),
+  /** Desktop only: a file picker; null when cancelled. */
+  pickLaunchTarget: (store: Store, productId: string) => invoke<Installed | null>("pick_launch_target", { store, productId }),
   listSites: () => invoke<SiteInfo[]>("list_sites"),
   listLinks: (appid: number) => invoke<GameLink[]>("list_links", { appid }),
   saveLink: (input: LinkInput) => invoke<GameLink>("save_link", { input }),
@@ -102,6 +115,17 @@ export function onDownloadProgress(cb: (p: DownloadProgress) => void): Promise<U
 
 export function onDownloadState(cb: (d: Download | DownloadRemoved) => void): Promise<UnlistenFn> {
   return listen<Download | DownloadRemoved>(EVENT_DOWNLOAD_STATE, (e) => cb(e.payload));
+}
+
+export const EVENT_INSTALL_PROGRESS = "install:progress";
+export const EVENT_INSTALL_CHANGED = "install:changed";
+
+export function onInstallProgress(cb: (p: InstallProgress) => void): Promise<UnlistenFn> {
+  return listen<InstallProgress>(EVENT_INSTALL_PROGRESS, (e) => cb(e.payload));
+}
+
+export function onInstallChanged(cb: (c: InstallChanged) => void): Promise<UnlistenFn> {
+  return listen<InstallChanged>(EVENT_INSTALL_CHANGED, (e) => cb(e.payload));
 }
 
 /** Normalizes anything thrown by `invoke` into a `CmdError`. */

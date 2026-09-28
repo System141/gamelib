@@ -1,12 +1,12 @@
 // Left navigation: catalog views and stores. Collapses to icons on narrower windows.
 
 import clsx from "clsx";
-import { Download, LayoutGrid, Library, Link2, Settings, Sparkles } from "lucide-react";
+import { Download, HardDrive, LayoutGrid, Library, Link2, Settings, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { tr } from "../i18n/tr";
 import { formatNumber } from "../lib/format";
 import type { AppStatus } from "../lib/types";
-import { useDownloads } from "../hooks/useData";
+import { useDownloads, useInstalls } from "../hooks/useData";
 import type { View } from "../hooks/useFilters";
 import { StoreMark } from "./badges";
 import { Logo } from "./icons";
@@ -27,6 +27,7 @@ interface Item {
 export function Sidebar({ view, onChange, status }: Props) {
   const counts = status?.storeCounts;
   const downloads = useDownloads().data;
+  const installed = useInstalls().data?.length ?? 0;
   const unfinished = downloads?.items.filter((d) => d.state !== "completed").length ?? 0;
   const running = downloads?.items.find((d) => d.state === "downloading");
   const live = running && downloads?.live?.id === running.id ? downloads.live : null;
@@ -53,6 +54,7 @@ export function Sidebar({ view, onChange, status }: Props) {
       title: tr.nav.library,
       items: [
         { id: "library", label: tr.views.library, icon: <Library size={17} />, count: counts?.owned || undefined },
+        { id: "installed", label: tr.views.installed, icon: <HardDrive size={17} />, count: installed || undefined },
         { id: "downloads", label: tr.views.downloads, icon: <DownloadsGlyph pct={pct} />, count: unfinished || undefined },
       ],
     },

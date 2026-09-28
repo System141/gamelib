@@ -118,3 +118,13 @@ describe("i18n", () => {
     expect(errorText({ kind: "invalid", message: "unknown_code" })).toBeTruthy();
   });
 });
+
+describe("errorText", () => {
+  it("explains coded failures with their detail", async () => {
+    const { errorText } = await import("../i18n/tr");
+    expect(errorText({ kind: "invalid", message: "installer_failed:4" })).toBe("Kurulum programı hata verdi (çıkış kodu 4).");
+    expect(errorText({ kind: "invalid", message: "archive_corrupt" })).toBe("Arşiv bozuk; yeniden indirmeyi dene.");
+    expect(errorText({ kind: "invalid", message: "unknown_code:1" })).toBe("Girilen bilgi geçersiz.");
+    expect(errorText({ kind: "network", message: "x" })).toContain("İnternet");
+  });
+});

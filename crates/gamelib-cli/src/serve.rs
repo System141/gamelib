@@ -295,13 +295,21 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
             to_json(&app.store_files(a.store, &a.product_id)?)
         }
         "get_downloads" => to_json(&app.downloads()?),
+        "get_installs" => to_json(&app.installs()?),
         // Only the desktop app downloads (the preview server never starts the queue).
         "enqueue_download"
         | "pause_download"
         | "resume_download"
         | "remove_download"
         | "clear_finished_downloads"
-        | "open_download_folder" => return Err(desktop_only()),
+        | "open_download_folder"
+        | "approve_install"
+        | "retry_install"
+        | "launch_game"
+        | "uninstall_game"
+        | "open_install_folder"
+        | "set_launch_target"
+        | "pick_launch_target" => return Err(desktop_only()),
         "list_sites" => to_json(&app.list_sites()),
         "list_links" => to_json(&app.list_links(parse::<AppidArgs>(args)?.appid)?),
         "save_link" => to_json(&app.save_link(&parse::<LinkArgs>(args)?.input)?),

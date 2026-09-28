@@ -1,18 +1,19 @@
 // "İndirmeler": the running download, the queue and finished downloads.
 
 import clsx from "clsx";
-import { Download as DownloadIcon, FolderOpen, Info, Library, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { CircleCheck, Download as DownloadIcon, Info, Library, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
 import { normalizeName } from "../lib/fold";
 import { formatBytes, formatPercent, formatRelative } from "../lib/format";
 import { showToast } from "../lib/toast";
-import type { Download, DownloadProgress, LibraryItem } from "../lib/types";
+import type { Download, DownloadProgress, InstallProgress, LibraryItem } from "../lib/types";
 import { useDownloads, useLibrary, useSettings } from "../hooks/useData";
 import { StoreMark, StorePill } from "./badges";
-import { IconButton, ProgressBar, percentOf, progressText, useDownloadActions } from "./DownloadPicker";
-import { SmallButton } from "./ui";
+import { ProgressBar, percentOf, progressText, useDownloadActions } from "./DownloadPicker";
+import { InstallLine, InstallMenu, PlayButton, useGameInstall } from "./InstallActions";
+import { IconButton, SmallButton } from "./ui";
 
 interface Props {
   search: string;
@@ -27,6 +28,7 @@ export function DownloadsView({ search, onOpenGame, onOpenLibrary }: Props) {
   const term = normalizeName(search.trim());
   const all = downloads.data?.items ?? [];
   const live = downloads.data?.live ?? null;
+  const installing = downloads.data?.installing ?? null;
   const items = useMemo(() => all.filter((d) => !term || normalizeName(d.title).includes(term)), [all, term]);
   const active = items.filter((d) => d.state === "downloading");
   const waiting = items.filter((d) => d.state === "queued" || d.state === "paused" || d.state === "failed");
@@ -96,7 +98,13 @@ export function DownloadsView({ search, onOpenGame, onOpenLibrary }: Props) {
             {finished.length > 0 && (
               <Section title={tr.downloads.finished}>
                 {finished.map((d) => (
-                  <Row key={d.id} download={d} image={art(d)} onOpenGame={onOpenGame} />
+                  <FinishedRow
+                    key={d.id}
+                    download={d}
+                    image={art(d)}
+                    installing={installing?.downloadId === d.id ? installing : null}
+                    onOpenGame={onOpenGame}
+                  />
                 ))}
               </Section>
             )}
@@ -206,19 +214,12 @@ function ActiveCard({
   );
 }
 
+/** A download waiting in the queue (queued, paused or failed). */
 function Row({ download, image, onOpenGame }: { download: Download; image: string | null; onOpenGame: (appid: number) => void }) {
   const act = useDownloadActions();
   const [confirm, setConfirm] = useState(false);
   const pct = percentOf(download, null);
-  const completed = download.state === "completed";
-  const detail =
-    download.state === "failed" && download.error
-      ? errorText(download.error)
-      : completed
-        ? [formatBytes(download.totalBytes), download.finishedAt ? tr.downloads.finishedAt(formatRelative(download.finishedAt)) : null]
-            .filter(Boolean)
-            .join(" · ")
-        : progressText(download, null);
+  const detail = download.state === "failed" && download.error ? errorText(download.error) : progressText(download, null);
 
   return (
     <div className="rounded-xl bg-ink-800/60 p-3 ring-1 ring-white/6">
@@ -227,12 +228,7 @@ function Row({ download, image, onOpenGame }: { download: Download; image: strin
         <div className="min-w-0 flex-1">
           <Title download={download} onOpenGame={onOpenGame} />
           <div className="mt-1 flex min-w-0 items-center gap-2 text-xs">
-            <span
-              className={clsx(
-                "shrink-0 font-medium",
-                download.state === "failed" ? "text-danger" : completed ? "text-success" : "text-ink-200",
-              )}
-            >
+            <span className={clsx("shrink-0 font-medium", download.state === "failed" ? "text-danger" : "text-ink-200")}>
               {tr.downloads.states[download.state]}
               {download.state === "paused" && ` · ${formatPercent(pct)}`}
             </span>
@@ -245,7 +241,7 @@ function Row({ download, image, onOpenGame }: { download: Download; image: strin
         </div>
         {confirm ? (
           <span className="flex shrink-0 items-center gap-1.5 text-[12.5px] text-ink-200">
-            {completed ? tr.downloads.confirmDelete : tr.downloads.confirmCancel}
+            {tr.downloads.confirmCancel}
             <SmallButton tone="danger" onClick={() => (setConfirm(false), act.remove(download))}>
               {tr.downloads.yesDelete}
             </SmallButton>
@@ -268,16 +264,76 @@ function Row({ download, image, onOpenGame }: { download: Download; image: strin
                 {tr.downloads.pause}
               </SmallButton>
             )}
-            {completed && (
-              <SmallButton tone="primary" onClick={() => act.openFolder(download)} icon={<FolderOpen size={13} />}>
-                {tr.downloads.openFolder}
-              </SmallButton>
+            <IconButton label={tr.downloads.cancelDownload} icon={<X size={13} />} onClick={() => setConfirm(true)} />
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** A finished download and its install. */
+function FinishedRow({
+  download,
+  image,
+  installing,
+  onOpenGame,
+}: {
+  download: Download;
+  image: string | null;
+  installing: InstallProgress | null;
+  onOpenGame: (appid: number) => void;
+}) {
+  const act = useDownloadActions();
+  const installed = useGameInstall(download.store, download.productId);
+  const [confirm, setConfirm] = useState(false);
+  const done = download.installState === "installed" ? installed : undefined;
+  const detail = [
+    download.optionLabel,
+    formatBytes(download.totalBytes),
+    download.finishedAt ? tr.downloads.finishedAt(formatRelative(download.finishedAt)) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div className="rounded-xl bg-ink-800/60 p-3 ring-1 ring-white/6">
+      <div className="flex items-start gap-3.5">
+        <Art download={download} image={image} className="aspect-[460/215] w-24" />
+        <div className="min-w-0 flex-1">
+          <Title download={download} onOpenGame={onOpenGame} />
+          <div className="mt-1 truncate text-xs text-ink-400 tabular-nums" title={detail}>
+            {detail}
+          </div>
+          <div className="mt-2 max-w-xl">
+            {done ? (
+              <div className="flex min-w-0 items-center gap-1.5 text-[12.5px] font-medium text-success">
+                <CircleCheck size={13} className="shrink-0" />
+                {tr.install.installed}
+                {done.dir && (
+                  <span className="truncate font-normal text-ink-400" title={done.dir}>
+                    · {done.dir}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <InstallLine download={download} progress={installing} />
             )}
-            <IconButton
-              label={completed ? tr.downloads.deleteFiles : tr.downloads.cancelDownload}
-              icon={completed ? <Trash2 size={13} /> : <X size={13} />}
-              onClick={() => setConfirm(true)}
-            />
+          </div>
+        </div>
+        {confirm ? (
+          <span className="flex shrink-0 items-center gap-1.5 text-[12.5px] text-ink-200">
+            {done ? tr.downloads.confirmDeleteInstalled : tr.downloads.confirmDelete}
+            <SmallButton tone="danger" onClick={() => (setConfirm(false), act.remove(download))}>
+              {tr.downloads.yesDelete}
+            </SmallButton>
+            <SmallButton onClick={() => setConfirm(false)}>{tr.downloads.no}</SmallButton>
+          </span>
+        ) : (
+          <span className="flex shrink-0 items-center gap-1.5">
+            {done && <PlayButton installed={done} />}
+            {done && <InstallMenu installed={done} placement="down" />}
+            <IconButton label={tr.downloads.deleteFiles} icon={<Trash2 size={13} />} onClick={() => setConfirm(true)} />
           </span>
         )}
       </div>

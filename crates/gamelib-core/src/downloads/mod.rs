@@ -25,7 +25,7 @@ use crate::app::EventSink;
 use crate::db::Db;
 use crate::db::downloads::{self as queue, FileRow, NewDownload};
 use crate::http::backoff;
-use crate::model::{Download, DownloadProgress, DownloadState};
+use crate::model::{Download, DownloadProgress, DownloadState, InstallState};
 use crate::secrets::SecretStore;
 use crate::stores::StoreSyncOptions;
 use crate::{Error, ErrorInfo, Result, check_cancel, sleep_cancellable, unix_now};
@@ -54,6 +54,8 @@ struct Shared {
     sink: Arc<dyn EventSink>,
     secrets: Arc<SecretStore>,
     opts: StoreSyncOptions,
+    /// Called when a download finished, so it gets installed.
+    on_complete: Arc<dyn Fn() + Send + Sync>,
     control: Mutex<Control>,
     wake: Condvar,
 }
@@ -88,6 +90,7 @@ impl DownloadManager {
         sink: Arc<dyn EventSink>,
         secrets: Arc<SecretStore>,
         opts: StoreSyncOptions,
+        on_complete: Arc<dyn Fn() + Send + Sync>,
     ) -> Self {
         Self {
             shared: Arc::new(Shared {
@@ -95,6 +98,7 @@ impl DownloadManager {
                 sink,
                 secrets,
                 opts,
+                on_complete,
                 control: Mutex::new(Control::default()),
                 wake: Condvar::new(),
             }),
@@ -268,7 +272,7 @@ pub fn downloads_root(library_dir: &Path) -> PathBuf {
 }
 
 /// Deletes a download folder, but only one that is inside a library's downloads folder.
-fn remove_files(dir: &str) {
+pub(crate) fn remove_files(dir: &str) {
     let path = Path::new(dir);
     let inside = path
         .parent()
@@ -355,9 +359,17 @@ fn run_one(shared: &Shared, conn: &Connection, download: Download, cancel: &Atom
         (Err(Error::Cancelled), _) => (DownloadState::Paused, None),
         (Err(e), _) => (DownloadState::Failed, Some(failure(e))),
     };
-    let _ = queue::set_state(conn, id, state, error.as_ref(), unix_now());
+    let now = unix_now();
+    let _ = queue::set_state(conn, id, state, error.as_ref(), now);
+    let completed = state == DownloadState::Completed;
+    if completed {
+        let _ = queue::set_install_state(conn, id, Some(InstallState::Waiting), None, None, now);
+    }
     drop(control);
     shared.emit_state(conn, id);
+    if completed {
+        (shared.on_complete)();
+    }
 }
 
 /// What a failed download keeps of its error; signed addresses lose their signature.

@@ -3,7 +3,19 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import type { Accounts, Download, DownloadList, GameLink, LinkInput, MatchState, Settings, Store, StoreMatch, TagInfo } from "../lib/types";
+import type {
+  Accounts,
+  Download,
+  DownloadList,
+  GameLink,
+  Installed,
+  LinkInput,
+  MatchState,
+  Settings,
+  Store,
+  StoreMatch,
+  TagInfo,
+} from "../lib/types";
 
 export function useStatus() {
   return useQuery({
@@ -202,10 +214,22 @@ export function upsertDownload(list: DownloadList | undefined, download: Downloa
   return {
     items: known ? items.map((d) => (d.id === download.id ? download : d)) : [download, ...items],
     live: list?.live ?? null,
+    installing: list?.installing ?? null,
   };
 }
 
 /** The most recent download of a product, if any. */
 export function downloadOf(list: DownloadList | undefined, store: Store, productId: string): Download | undefined {
   return list?.items.find((d) => d.store === store && d.productId === productId);
+}
+
+// --- installed games ------------------------------------------------------------------------
+
+/** Installed games; `useDownloadEvents` refreshes them when one changes. */
+export function useInstalls() {
+  return useQuery({ queryKey: ["installs"], queryFn: api.getInstalls });
+}
+
+export function installOf(list: Installed[] | undefined, store: Store, productId: string): Installed | undefined {
+  return list?.find((i) => i.store === store && i.productId === productId);
 }

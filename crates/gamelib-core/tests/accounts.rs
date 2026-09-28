@@ -30,6 +30,11 @@ struct Fake {
 
 /// GOG auth/embed/product APIs and itch.io's API, checking credentials like the real ones.
 fn fake() -> Fake {
+    fake_with(Duration::ZERO)
+}
+
+/// Like [`fake`], with a GOG catalog that takes `catalog_delay` to answer.
+fn fake_with(catalog_delay: Duration) -> Fake {
     let refreshes = Arc::new(AtomicU32::new(0));
     let counter = refreshes.clone();
     let server = TestServer::start(move |req: &Request| {
@@ -62,13 +67,16 @@ fn fake() -> Fake {
                        "links": {"product_card": "https://www.gog.com/game/terraria"}})
                 .to_string(),
             ),
-            "/v1/catalog" => Response::json(
+            "/v1/catalog" => {
+                std::thread::sleep(catalog_delay);
+                Response::json(
                 json!({"productCount": 1, "products": [{
                     "id": "1207664643", "title": "The Witcher 3: Wild Hunt - Complete Edition", "productType": "game",
                     "releaseDate": "2015.05.19", "developers": ["CD PROJEKT RED"], "publishers": ["CD PROJEKT RED"],
                     "operatingSystems": ["windows"], "storeLink": "https://www.gog.com/en/game/the_witcher_3"}]})
                 .to_string(),
-            ),
+                )
+            }
             p if p.starts_with("/platforms/") => Response::status(404),
             // itch.io
             "/profile" if req.header("authorization") == Some(ITCH_KEY) => {
@@ -401,4 +409,27 @@ fn settings_have_defaults_and_validate() {
         }),
         Err(Error::Invalid("library_dir"))
     ));
+}
+
+#[test]
+fn signing_in_during_another_job_reads_the_library_afterwards() {
+    let fake = fake_with(Duration::from_millis(800));
+    let dir = TempDir::new("pending");
+    let sink = Arc::new(Finished::default());
+    let app = app(&dir, &fake.server.base, sink.clone());
+
+    // A store sync is busy with the (slow) catalog while the itch.io key is saved.
+    app.start_store_sync().unwrap();
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        app.itch_set_key(ITCH_KEY).unwrap().itch.unwrap().username,
+        "Player One"
+    );
+    let first = sink.wait(1);
+    assert_eq!(first["kind"], "stores");
+    // The library job that could not start then runs by itself.
+    let second = sink.wait(2);
+    assert_eq!(second["kind"], "library", "{second}");
+    assert_eq!(second["library"]["itchOwned"], 2, "{second}");
+    assert_eq!(app.library(Some(Store::Itch)).unwrap().len(), 2);
 }

@@ -3,13 +3,14 @@
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::downloads::sources::Source;
-use crate::model::{Download, DownloadState, Platform, Store};
+use crate::model::{Download, DownloadState, InstallState, Platform, Store};
 use crate::{ErrorInfo, ErrorKind, Result};
 
 const COLUMNS: &str =
     "d.id, d.store, d.product_id, d.appid, d.title, d.option_id, d.option_label, d.platform,
   d.state, d.total_bytes, d.done_bytes, d.dir, d.error_kind, d.error, d.created_at, d.finished_at,
-  (SELECT COUNT(*) FROM download_files f WHERE f.download_id = d.id)";
+  (SELECT COUNT(*) FROM download_files f WHERE f.download_id = d.id),
+  d.install_state, d.install_kind, d.install_error_kind, d.install_error";
 
 /// A new queued download and its files (all pending).
 pub struct NewDownload<'a> {
@@ -172,6 +173,85 @@ pub fn set_progress(conn: &Connection, id: i64, done: u64, total: u64) -> Result
     Ok(())
 }
 
+/// Sets a download's install state, kind and error (the kind is kept when `None`).
+pub fn set_install_state(
+    conn: &Connection,
+    id: i64,
+    state: Option<InstallState>,
+    kind: Option<&str>,
+    error: Option<&ErrorInfo>,
+    now: i64,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE downloads SET install_state = ?2, install_kind = COALESCE(?3, install_kind),
+           install_error_kind = ?4, install_error = ?5, updated_at = ?6
+         WHERE id = ?1",
+        params![
+            id,
+            state.map(InstallState::as_str),
+            kind,
+            error.map(|e| kind_str(e.kind)),
+            error.map(|e| e.message.as_str()),
+            now
+        ],
+    )?;
+    Ok(())
+}
+
+/// Moves a finished download's install to `to` if it is in one of the `from` states (`None`
+/// meaning never installed), clearing its error. Returns whether it moved.
+pub fn transition_install(
+    conn: &Connection,
+    id: i64,
+    from: &[Option<InstallState>],
+    to: InstallState,
+    now: i64,
+) -> Result<bool> {
+    let states: Vec<&str> = from.iter().flatten().map(|s| s.as_str()).collect();
+    let allow_none = from.contains(&None);
+    let changed = conn.execute(
+        "UPDATE downloads SET install_state = ?2, install_error_kind = NULL, install_error = NULL,
+           updated_at = ?3
+         WHERE id = ?1 AND state = 'completed'
+           AND (install_state IN (SELECT value FROM json_each(?4)) OR (?5 AND install_state IS NULL))",
+        params![id, to.as_str(), now, serde_json::to_string(&states)?, allow_none],
+    )?;
+    Ok(changed > 0)
+}
+
+/// The next finished download to install: waiting or approved, oldest first.
+pub fn next_install(conn: &Connection) -> Result<Option<Download>> {
+    Ok(conn
+        .query_row(
+            &format!(
+                "SELECT {COLUMNS} FROM downloads d
+                 WHERE d.state = 'completed' AND d.install_state IN ('waiting', 'approved')
+                 ORDER BY d.finished_at, d.id LIMIT 1"
+            ),
+            [],
+            row,
+        )
+        .optional()?)
+}
+
+/// After a game is uninstalled, its downloads no longer count as installed.
+pub fn forget_installed(conn: &Connection, store: Store, product_id: &str, now: i64) -> Result<()> {
+    conn.execute(
+        "UPDATE downloads SET install_state = NULL, updated_at = ?3
+         WHERE store = ?1 AND product_id = ?2 AND install_state = 'installed'",
+        params![store.as_str(), product_id, now],
+    )?;
+    Ok(())
+}
+
+/// Installs that were running when the app closed are tried again.
+pub fn requeue_installing(conn: &Connection, now: i64) -> Result<u32> {
+    Ok(conn.execute(
+        "UPDATE downloads SET install_state = 'waiting', updated_at = ?1 WHERE install_state = 'installing'",
+        params![now],
+    )? as u32)
+}
+
 /// Downloads that were running when the app closed go back into the queue.
 pub fn requeue_interrupted(conn: &Connection, now: i64) -> Result<u32> {
     Ok(conn.execute(
@@ -304,6 +384,18 @@ fn row(r: &Row<'_>) -> rusqlite::Result<Download> {
         created_at: r.get(14)?,
         finished_at: r.get(15)?,
         files: r.get(16)?,
+        install_state: r
+            .get::<_, Option<String>>(17)?
+            .as_deref()
+            .and_then(InstallState::parse),
+        install_kind: r.get(18)?,
+        install_error: r.get::<_, Option<String>>(20)?.map(|message| {
+            let kind: Option<String> = r.get(19).ok().flatten();
+            ErrorInfo {
+                kind: kind.as_deref().map_or(ErrorKind::Other, parse_kind),
+                message,
+            }
+        }),
     })
 }
 

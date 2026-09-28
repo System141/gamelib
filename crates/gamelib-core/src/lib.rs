@@ -7,6 +7,7 @@
 //! - [`stores`]: other stores (GOG, itch.io): their catalogs, and matching them to Steam games.
 //! - [`http`]: the shared HTTP client, retries and request pacing.
 //! - [`downloads`]: the download queue for GOG and itch.io files, with resume and checksums.
+//! - [`install`]: installing finished downloads, starting and removing installed games.
 //! - [`app`]: the command layer shared by the desktop app and `gamelib-cli serve`.
 
 pub mod app;
@@ -15,6 +16,7 @@ pub mod db;
 pub mod downloads;
 pub mod error;
 pub mod http;
+pub mod install;
 pub mod links;
 pub mod model;
 pub mod new_releases;

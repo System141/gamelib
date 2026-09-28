@@ -41,7 +41,8 @@ function createEventBus() {
   const listeners = new Map<string, Set<number>>();
   const emit: Emit = (event, payload) => {
     const internals = (window as unknown as { __TAURI_INTERNALS__: Internals }).__TAURI_INTERNALS__;
-    for (const id of listeners.get(event) ?? []) internals.runCallback(id, { event, id, payload });
+    // A copy for each listener, as Tauri's serialized events give.
+    for (const id of listeners.get(event) ?? []) internals.runCallback(id, { event, id, payload: structuredClone(payload) });
   };
   const handle = (cmd: string, a: Record<string, any>): unknown => {
     switch (cmd) {

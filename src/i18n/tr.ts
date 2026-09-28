@@ -1,7 +1,7 @@
 // All user-facing text. Game data (names, English descriptions) comes from Steam as-is.
 
 import { formatNumber, formatRelative } from "../lib/format";
-import type { CheckStatus, CmdError, DeckCompat, DownloadState, MatchMethod, SortKey, Store, SyncPhase } from "../lib/types";
+import type { CheckStatus, CmdError, DeckCompat, DownloadState, InstallMethod, MatchMethod, SortKey, Store, SyncPhase } from "../lib/types";
 
 const n = formatNumber;
 
@@ -17,6 +17,7 @@ export const tr = {
     gog: "GOG'da olanlar",
     itch: "itch.io'da olanlar",
     library: "Sahip olduklarım",
+    installed: "Kurulu",
     downloads: "İndirmeler",
     settings: "Ayarlar",
   },
@@ -39,6 +40,68 @@ export const tr = {
     refresh: "Kütüphaneyi yenile",
     details: "Detaylar",
     notOnSteam: "Steam kataloğunda eşleşmedi",
+    installedSubtitle: (count: number) => `${n(count)} oyun kurulu`,
+    emptyInstalledTitle: "Henüz kurulu oyun yok",
+    emptyInstalled: "Sahip olduğun bir oyunu indirdiğinde GameLib onu kütüphane klasörüne kurar.",
+  },
+  install: {
+    play: "Oyna",
+    installed: "Kurulu",
+    install: "Kur",
+    stages: {
+      checking: "Dosya kontrol ediliyor…",
+      unpacking: "Arşiv açılıyor…",
+      installing: "Kurulum programı çalışıyor…",
+      cleaning: "Kurulum dosyaları siliniyor…",
+    },
+    installing: "Kuruluyor…",
+    waiting: "Kurulum sırada",
+    confirm: "Kurulum onayı bekliyor",
+    confirmText:
+      "Bu dosya geliştiricinin kendi kurulum programı. GameLib onu ancak sen onaylarsan çalıştırır; kurulum pencereleri açılabilir.",
+    confirmShort: "Geliştiricinin kendi kurulum programı; onaylarsan çalışır.",
+    approve: "Kurulumu başlat",
+    failed: "Kurulamadı",
+    retry: "Yeniden dene",
+    manual: "Elle kurulmalı",
+    manualHint: (kind: string | null) => {
+      const what =
+        kind === "rar"
+          ? "RAR arşivlerini"
+          : kind === "mac_package"
+            ? "macOS paketlerini"
+            : kind === "script"
+              ? "Linux kurulum betiklerini"
+              : kind === "inno_setup" || kind === "nsis" || kind === "msi" || kind === "installer" || kind === "exe"
+                ? "Windows programlarını bu sistemde"
+                : "bu dosyayı";
+      return `GameLib ${what} kendisi kuramıyor; klasörü açıp kurabilirsin.`;
+    },
+    notInstalled: "İndirildi, kurulmadı",
+    openFolder: "Oyun klasörünü aç",
+    uninstall: "Kaldır",
+    uninstalling: "Kaldırılıyor…",
+    confirmUninstall: "Oyun kaldırılsın mı?",
+    uninstallHint: (method: InstallMethod) =>
+      method === "archive" || method === "portable"
+        ? "Oyunun klasörü, içindeki kayıtlarla birlikte silinir."
+        : "Oyunun kaldırma programı çalışır; Windows yönetici izni isteyebilir.",
+    yesUninstall: "Evet, kaldır",
+    cancel: "Vazgeç",
+    target: "Başlatılacak dosya",
+    chooseTarget: "Başlatılacak dosyayı seç",
+    otherFile: "Başka bir dosya…",
+    noTarget: "Başlatılacak dosya belli değil; bir dosya seç.",
+    external: "GOG Galaxy ile kurulmuş",
+    more: "Diğer işlemler",
+    toastInstalled: (title: string) => `${title} kuruldu`,
+    toastFailed: (title: string) => `${title} kurulamadı`,
+    toastConfirm: (title: string) => `${title} için kurulum onayı gerekiyor`,
+    toastConfirmDetail: "Kurulum programını İndirmeler sayfasından başlatabilirsin.",
+    toastManual: (title: string) => `${title} indirildi`,
+    toastStarted: (title: string) => `${title} başlatılıyor`,
+    toastUninstalled: (title: string) => `${title} kaldırıldı`,
+    toastTarget: "Başlatılacak dosya değiştirildi",
   },
   downloads: {
     title: "İndirmeler",
@@ -83,6 +146,7 @@ export const tr = {
     cancelDownload: "İptal et",
     confirmCancel: "İndirilen dosyalar silinsin mi?",
     confirmDelete: "Dosyalar silinsin mi?",
+    confirmDeleteInstalled: "Kurulum dosyaları silinsin mi? Kurulu oyun kalır.",
     yesDelete: "Evet, sil",
     no: "Vazgeç",
     deleteFiles: "Dosyaları sil",
@@ -483,7 +547,19 @@ const INVALID_CODES: Record<string, string> = {
   no_files: "Bu oyun için indirilebilir dosya bulunamadı.",
   checksum: "İndirilen dosya bozuk çıktı (sağlama toplamı tutmadı). Yeniden dene.",
   link_expired: "Mağazanın indirme adresi yenilenemedi. Biraz sonra yeniden dene.",
+  install_files: "İndirilen dosyalar bulunamadı; oyunu yeniden indir.",
+  archive_unsafe: "Arşiv, oyun klasörünün dışına dosya yazmaya çalışıyor; güvenlik için açılmadı.",
+  archive_corrupt: "Arşiv bozuk; yeniden indirmeyi dene.",
+  unsupported_archive: "Bu arşiv biçimi ya da şifreli arşivler desteklenmiyor.",
+  blocked: "Windows ya da antivirüs programı bu dosyayı engelledi.",
+  launch_target: "Başlatılacak dosya bulunamadı; bir dosya seç.",
   store: "Bu mağazada arama yapılamıyor.",
+};
+
+/** Codes that come with a detail after a colon (`installer_failed:4`). */
+const DETAILED_CODES: Record<string, (detail: string) => string> = {
+  installer_failed: (code) => `Kurulum programı hata verdi (çıkış kodu ${code}).`,
+  uninstaller_failed: (code) => `Kaldırma programı hata verdi (çıkış kodu ${code}).`,
 };
 
 const ERROR_KINDS: Record<CmdError["kind"], string> = {
@@ -502,6 +578,8 @@ const ERROR_KINDS: Record<CmdError["kind"], string> = {
 
 export function errorText(e: CmdError): string {
   if (e.kind === "invalid") {
+    const [code = "", detail] = e.message.split(/:(.*)/s);
+    if (detail != null && DETAILED_CODES[code]) return DETAILED_CODES[code](detail);
     return INVALID_CODES[e.message] ?? ERROR_KINDS.invalid;
   }
   return ERROR_KINDS[e.kind] ?? ERROR_KINDS.other;

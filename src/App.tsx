@@ -70,8 +70,11 @@ export function App() {
         <main className="flex min-h-0 flex-1 flex-col">
           {status.isLoading ? null : empty ? (
             <FirstRun status={status.data} onFullSync={fullSync} onNewReleases={newReleases} onCancel={cancel} />
-          ) : f.view === "library" ? (
+          ) : f.view === "library" || f.view === "installed" ? (
             <LibraryView
+              key={f.view}
+              installedOnly={f.view === "installed"}
+              onOpenLibrary={() => f.setView("library")}
               search={f.search}
               status={status.data}
               onOpenGame={openGame}

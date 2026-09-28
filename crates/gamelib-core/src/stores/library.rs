@@ -42,39 +42,49 @@ pub(crate) fn sync_library(
     progress: &mut Progress,
 ) -> Result<LibraryReport> {
     let mut report = LibraryReport::default();
-    let accounts = secrets.load()?;
     progress.emit(SyncPhase::Library, 0, 0);
-
-    if accounts.gog.is_some() {
-        match gog_library(
-            db,
-            secrets,
-            opts,
-            cancel,
-            counters,
-            progress,
-            &mut report.warnings,
-        ) {
-            Ok(n) => report.gog_owned = Some(n),
-            Err(Error::Invalid("gog_session" | "gog_signed_out")) => {
-                sign_out(db, secrets, Store::Gog)?;
-                report.gog_signed_out = true;
-            }
-            Err(Error::Cancelled) => return Err(Error::Cancelled),
-            Err(e) => report.warnings.push(format!("GOG: {e}")),
+    let (mut gog_read, mut itch_read) = (false, false);
+    // Accounts are read again after each round, so one signed in meanwhile is read too.
+    loop {
+        let accounts = secrets.load()?;
+        let gog = accounts.gog.is_some() && !gog_read;
+        let itch = accounts.itch.filter(|_| !itch_read);
+        if !gog && itch.is_none() {
+            break;
         }
-    }
-    if let Some(key) = accounts.itch {
-        match itch_library(db, &key.api_key, opts, cancel, counters, progress) {
-            Ok(n) => report.itch_owned = Some(n),
-            Err(Error::Invalid("itch_key")) => {
-                sign_out(db, secrets, Store::Itch)?;
-                report
-                    .warnings
-                    .push("itch.io: the API key was refused".into());
+        if gog {
+            gog_read = true;
+            match gog_library(
+                db,
+                secrets,
+                opts,
+                cancel,
+                counters,
+                progress,
+                &mut report.warnings,
+            ) {
+                Ok(n) => report.gog_owned = Some(n),
+                Err(Error::Invalid("gog_session" | "gog_signed_out")) => {
+                    sign_out(db, secrets, Store::Gog)?;
+                    report.gog_signed_out = true;
+                }
+                Err(Error::Cancelled) => return Err(Error::Cancelled),
+                Err(e) => report.warnings.push(format!("GOG: {e}")),
             }
-            Err(Error::Cancelled) => return Err(Error::Cancelled),
-            Err(e) => report.warnings.push(format!("itch.io: {e}")),
+        }
+        if let Some(key) = itch {
+            itch_read = true;
+            match itch_library(db, &key.api_key, opts, cancel, counters, progress) {
+                Ok(n) => report.itch_owned = Some(n),
+                Err(Error::Invalid("itch_key")) => {
+                    sign_out(db, secrets, Store::Itch)?;
+                    report
+                        .warnings
+                        .push("itch.io: the API key was refused".into());
+                }
+                Err(Error::Cancelled) => return Err(Error::Cancelled),
+                Err(e) => report.warnings.push(format!("itch.io: {e}")),
+            }
         }
     }
     report.matched = store_db::owned_matched(db.conn())?;

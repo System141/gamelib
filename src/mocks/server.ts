@@ -2,7 +2,14 @@
 // `/api` proxy in vite.config.ts. Every `invoke` becomes `POST /api/<command>` with the same JSON
 // arguments; job and download events arrive as server-sent events from `/api/events`.
 
-import { EVENT_DOWNLOAD_PROGRESS, EVENT_DOWNLOAD_STATE, EVENT_FINISHED, EVENT_PROGRESS } from "../lib/api";
+import {
+  EVENT_DOWNLOAD_PROGRESS,
+  EVENT_DOWNLOAD_STATE,
+  EVENT_FINISHED,
+  EVENT_INSTALL_CHANGED,
+  EVENT_INSTALL_PROGRESS,
+  EVENT_PROGRESS,
+} from "../lib/api";
 import type { CmdError } from "../lib/types";
 import type { Emit } from "./install";
 
@@ -69,7 +76,14 @@ function streamEvents(emit: Emit) {
   let delay = 1000;
   const connect = () => {
     const source = new EventSource("/api/events");
-    for (const name of [EVENT_PROGRESS, EVENT_FINISHED, EVENT_DOWNLOAD_PROGRESS, EVENT_DOWNLOAD_STATE]) {
+    for (const name of [
+      EVENT_PROGRESS,
+      EVENT_FINISHED,
+      EVENT_DOWNLOAD_PROGRESS,
+      EVENT_DOWNLOAD_STATE,
+      EVENT_INSTALL_PROGRESS,
+      EVENT_INSTALL_CHANGED,
+    ]) {
       source.addEventListener(name, (e) => emit(name, JSON.parse((e as MessageEvent<string>).data)));
     }
     source.onopen = () => {
