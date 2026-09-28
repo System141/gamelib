@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = ["crates/gamelib-core", "src-tauri"]
+# `cargo test` / `cargo run` at the root only touch the core crate, so they work
+# without the GTK/WebKit system libraries the Tauri shell needs on Linux.
+default-members = ["crates/gamelib-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+
+[workspace.dependencies]
+gamelib-core = { path = "crates/gamelib-core" }
+reqwest = { version = "0.13.5", features = ["blocking", "json", "gzip", "query"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# SQLite's C code and JSON parsing are hot paths during a sync; keep them fast
+# even in debug builds so `tauri dev` stays usable.
+[profile.dev.package.libsqlite3-sys]
+opt-level = 3
+
+[profile.dev.package.serde_json]
+opt-level = 3

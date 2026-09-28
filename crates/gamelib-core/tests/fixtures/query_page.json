@@ -1,0 +1,1438 @@
+{
+ "response": {
+  "metadata": {
+   "total_matching_records": 130616,
+   "start": 0,
+   "count": 8
+  },
+  "store_items": [
+   {
+    "item_type": 0,
+    "id": 10,
+    "success": 1,
+    "visible": true,
+    "name": "Counter-Strike",
+    "store_url_path": "app/10/CounterStrike",
+    "store_url_slug": "CounterStrike",
+    "appid": 10,
+    "type": 0,
+    "content_descriptorids": [
+     2,
+     5
+    ],
+    "tagids": [
+     19,
+     1663,
+     3859,
+     1774,
+     1693,
+     5711,
+     3839,
+     3878,
+     1708,
+     6691,
+     5055,
+     1775,
+     3916,
+     4168,
+     9,
+     97070,
+     1662,
+     5154,
+     7743,
+     14720
+    ],
+    "categories": {
+     "supported_player_categoryids": [
+      1,
+      49,
+      36,
+      37
+     ],
+     "feature_categoryids": [
+      66,
+      68,
+      69,
+      75,
+      8,
+      62
+     ]
+    },
+    "reviews": {
+     "summary_filtered": {
+      "review_count": 169853,
+      "percent_positive": 96,
+      "review_score": 9,
+      "review_score_label": "Overwhelmingly Positive"
+     },
+     "summary_language_specific": {
+      "review_count": 35165,
+      "percent_positive": 96,
+      "review_score": 9,
+      "review_score_label": "Overwhelmingly Positive"
+     }
+    },
+    "basic_info": {
+     "publishers": [
+      {
+       "name": "Valve",
+       "creator_clan_account_id": 4
+      }
+     ],
+     "developers": [
+      {
+       "name": "Valve",
+       "creator_clan_account_id": 4
+      }
+     ]
+    },
+    "tags": [
+     {
+      "tagid": 19,
+      "weight": 1613
+     },
+     {
+      "tagid": 1663,
+      "weight": 1446
+     },
+     {
+      "tagid": 3859,
+      "weight": 1022
+     },
+     {
+      "tagid": 1774,
+      "weight": 1004
+     },
+     {
+      "tagid": 1693,
+      "weight": 840
+     },
+     {
+      "tagid": 5711,
+      "weight": 566
+     },
+     {
+      "tagid": 3839,
+      "weight": 518
+     },
+     {
+      "tagid": 3878,
+      "weight": 488
+     },
+     {
+      "tagid": 1708,
+      "weight": 410
+     },
+     {
+      "tagid": 6691,
+      "weight": 369
+     },
+     {
+      "tagid": 5055,
+      "weight": 364
+     },
+     {
+      "tagid": 1775,
+      "weight": 275
+     },
+     {
+      "tagid": 3916,
+      "weight": 247
+     },
+     {
+      "tagid": 4168,
+      "weight": 197
+     },
+     {
+      "tagid": 9,
+      "weight": 190
+     },
+     {
+      "tagid": 97070,
+      "weight": 107
+     },
+     {
+      "tagid": 1662,
+      "weight": 94
+     },
+     {
+      "tagid": 5154,
+      "weight": 90
+     },
+     {
+      "tagid": 7743,
+      "weight": 85
+     },
+     {
+      "tagid": 14720,
+      "weight": 67
+     }
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/10/${FILENAME}?t=1745368572",
+     "main_capsule": "capsule_616x353.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "hero_capsule": "hero_capsule.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "community_icon": "6b0312cda02f5f777efa2f3318c307ff9acafbb5",
+     "page_background_path": "app/10?t=1745368572",
+     "last_modified": 1745368572
+    },
+    "release": {
+     "steam_release_date": 973065600
+    },
+    "platforms": {
+     "windows": true,
+     "mac": true,
+     "steamos_linux": true,
+     "vr_support": {},
+     "steam_deck_compat_category": 2,
+     "steam_os_compat_category": 2,
+     "steam_frame_compat_category": 0,
+     "steam_machine_compat_category": 2
+    },
+    "best_purchase_option": {
+     "packageid": 7,
+     "purchase_option_name": "Counter-Strike: Condition Zero",
+     "final_price_in_cents": "579",
+     "formatted_final_price": "$5.79",
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 2,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 440,
+    "success": 1,
+    "visible": true,
+    "name": "Team Fortress 2",
+    "store_url_path": "app/440/Team_Fortress_2",
+    "store_url_slug": "Team_Fortress_2",
+    "appid": 440,
+    "type": 0,
+    "is_free": true,
+    "tagids": [
+     113,
+     620519,
+     3859,
+     1663,
+     1774,
+     19,
+     4155,
+     4136,
+     5711,
+     3839,
+     3843,
+     3878,
+     4195,
+     4202,
+     1685,
+     1719,
+     5752,
+     1708,
+     4562,
+     1702
+    ],
+    "categories": {
+     "supported_player_categoryids": [
+      1,
+      27
+     ],
+     "feature_categoryids": [
+      22,
+      29,
+      13,
+      30,
+      35,
+      66,
+      67,
+      68,
+      69,
+      70,
+      8,
+      15,
+      17,
+      14,
+      41,
+      42
+     ],
+     "controller_categoryids": [
+      18
+     ]
+    },
+    "reviews": {
+     "summary_filtered": {
+      "review_count": 1252398,
+      "percent_positive": 91,
+      "review_score": 8,
+      "review_score_label": "Very Positive"
+     },
+     "summary_language_specific": {
+      "review_count": 743028,
+      "percent_positive": 90,
+      "review_score": 8,
+      "review_score_label": "Very Positive"
+     }
+    },
+    "basic_info": {
+     "short_description": "Nine distinct classes provide a broad range of tactical abilities and personalities.  Constantly updated with new game modes, maps, equipment and, most importantly, hats!",
+     "publishers": [
+      {
+       "name": "Valve",
+       "creator_clan_account_id": 4
+      }
+     ],
+     "developers": [
+      {
+       "name": "Valve",
+       "creator_clan_account_id": 4
+      }
+     ],
+     "capsule_headline": "Just Updated!"
+    },
+    "tags": [
+     {
+      "tagid": 113,
+      "weight": 2217
+     },
+     {
+      "tagid": 620519,
+      "weight": 2141
+     },
+     {
+      "tagid": 3859,
+      "weight": 813
+     },
+     {
+      "tagid": 1663,
+      "weight": 564
+     },
+     {
+      "tagid": 1774,
+      "weight": 457
+     },
+     {
+      "tagid": 19,
+      "weight": 433
+     },
+     {
+      "tagid": 4155,
+      "weight": 361
+     },
+     {
+      "tagid": 4136,
+      "weight": 344
+     },
+     {
+      "tagid": 5711,
+      "weight": 344
+     },
+     {
+      "tagid": 3839,
+      "weight": 287
+     },
+     {
+      "tagid": 3843,
+      "weight": 265
+     },
+     {
+      "tagid": 3878,
+      "weight": 255
+     },
+     {
+      "tagid": 4195,
+      "weight": 255
+     },
+     {
+      "tagid": 4202,
+      "weight": 244
+     },
+     {
+      "tagid": 1685,
+      "weight": 211
+     },
+     {
+      "tagid": 1719,
+      "weight": 198
+     },
+     {
+      "tagid": 5752,
+      "weight": 180
+     },
+     {
+      "tagid": 1708,
+      "weight": 145
+     },
+     {
+      "tagid": 4562,
+      "weight": 143
+     },
+     {
+      "tagid": 1702,
+      "weight": 134
+     }
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/440/${FILENAME}?t=1757348372",
+     "main_capsule": "capsule_616x353.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "page_background": "page_bg_generated_v6b.jpg",
+     "hero_capsule": "hero_capsule.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "community_icon": "f568912870a4684f9ec76277a1a404dda6bab213",
+     "page_background_path": "app/440?t=1757348372",
+     "raw_page_background": "page_bg_raw.jpg",
+     "last_modified": 1757348372
+    },
+    "release": {
+     "steam_release_date": 1191999600,
+     "original_release_date": 1191999600
+    },
+    "platforms": {
+     "windows": true,
+     "steamos_linux": true,
+     "vr_support": {},
+     "steam_deck_compat_category": 2,
+     "steam_os_compat_category": 2,
+     "steam_frame_compat_category": 0,
+     "steam_machine_compat_category": 2
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 570,
+    "success": 1,
+    "visible": true,
+    "name": "Dota 2",
+    "store_url_path": "app/570/Dota_2",
+    "store_url_slug": "Dota_2",
+    "appid": 570,
+    "type": 0,
+    "is_free": true,
+    "content_descriptorids": [
+     5
+    ],
+    "tagids": [
+     113,
+     1718,
+     3859,
+     9,
+     5055,
+     5711,
+     3878,
+     19,
+     3843,
+     1775,
+     4026,
+     1685,
+     1676,
+     122,
+     1645,
+     1684,
+     4747,
+     4711,
+     4231,
+     599
+    ],
+    "categories": {
+     "supported_player_categoryids": [
+      1,
+      9
+     ],
+     "feature_categoryids": [
+      29,
+      30,
+      40,
+      35,
+      66,
+      67,
+      68,
+      8,
+      63
+     ]
+    },
+    "reviews": {
+     "summary_filtered": {
+      "review_count": 2786895,
+      "percent_positive": 80,
+      "review_score": 8,
+      "review_score_label": "Very Positive"
+     },
+     "summary_language_specific": {
+      "review_count": 839850,
+      "percent_positive": 87,
+      "review_score": 8,
+      "review_score_label": "Very Positive"
+     }
+    },
+    "basic_info": {
+     "short_description": "Every day, millions of players worldwide enter battle as one of over a hundred Dota heroes. And no matter if it's their 10th hour of play or 1,000th, there's always something new to discover. With regular updates that ensure a constant evolution of gameplay, features, and heroes, Dota 2 has taken on a life of its own.",
+     "publishers": [
+      {
+       "name": "Valve",
+       "creator_clan_account_id": 4
+      }
+     ],
+     "developers": [
+      {
+       "name": "Valve",
+       "creator_clan_account_id": 4
+      }
+     ],
+     "franchises": [
+      {
+       "name": "Dota",
+       "creator_clan_account_id": 40102679
+      }
+     ]
+    },
+    "tags": [
+     {
+      "tagid": 113,
+      "weight": 3008
+     },
+     {
+      "tagid": 1718,
+      "weight": 1019
+     },
+     {
+      "tagid": 3859,
+      "weight": 778
+     },
+     {
+      "tagid": 9,
+      "weight": 723
+     },
+     {
+      "tagid": 5055,
+      "weight": 598
+     },
+     {
+      "tagid": 5711,
+      "weight": 554
+     },
+     {
+      "tagid": 3878,
+      "weight": 422
+     },
+     {
+      "tagid": 19,
+      "weight": 401
+     },
+     {
+      "tagid": 3843,
+      "weight": 378
+     },
+     {
+      "tagid": 1775,
+      "weight": 308
+     },
+     {
+      "tagid": 4026,
+      "weight": 275
+     },
+     {
+      "tagid": 1685,
+      "weight": 220
+     },
+     {
+      "tagid": 1676,
+      "weight": 210
+     },
+     {
+      "tagid": 122,
+      "weight": 194
+     },
+     {
+      "tagid": 1645,
+      "weight": 193
+     },
+     {
+      "tagid": 1684,
+      "weight": 191
+     },
+     {
+      "tagid": 4747,
+      "weight": 150
+     },
+     {
+      "tagid": 4711,
+      "weight": 140
+     },
+     {
+      "tagid": 4231,
+      "weight": 125
+     },
+     {
+      "tagid": 599,
+      "weight": 101
+     }
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/570/${FILENAME}?t=1769535998",
+     "main_capsule": "capsule_616x353.jpg",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "header_2x": "header_2x.jpg",
+     "page_background": "page_bg_generated_v6b.jpg",
+     "hero_capsule": "hero_capsule.jpg",
+     "library_capsule": "6843027380c3bfd0952449fd9174f492ef2e7b40/library_capsule.jpg",
+     "library_capsule_2x": "6843027380c3bfd0952449fd9174f492ef2e7b40/library_capsule_2x.jpg",
+     "library_hero": "06918d1009cc79ffdee853f1ef789cddf8014226/library_hero.jpg",
+     "library_hero_2x": "06918d1009cc79ffdee853f1ef789cddf8014226/library_hero_2x.jpg",
+     "community_icon": "48eb825bb93787945065b460bdc109e395384ebf",
+     "page_background_path": "app/570?t=1769535998",
+     "raw_page_background": "page_bg_raw.jpg",
+     "last_modified": 1769535998
+    },
+    "release": {
+     "steam_release_date": 1373389200,
+     "original_release_date": 0
+    },
+    "platforms": {
+     "windows": true,
+     "mac": true,
+     "steamos_linux": true,
+     "vr_support": {},
+     "steam_deck_compat_category": 2,
+     "steam_os_compat_category": 2,
+     "steam_frame_compat_category": 0,
+     "steam_machine_compat_category": 2
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 1670,
+    "success": 1,
+    "visible": true,
+    "name": "Iron Warriors: T-72 Tank Command ",
+    "store_url_path": "app/1670/Iron_Warriors_T72_Tank_Command",
+    "store_url_slug": "Iron_Warriors_T72_Tank_Command",
+    "appid": 1670,
+    "type": 0,
+    "content_descriptorids": [
+     5
+    ],
+    "tagids": [
+     599,
+     9,
+     13276,
+     4168,
+     19,
+     4182,
+     5179,
+     4175,
+     113,
+     1774,
+     3814,
+     4684,
+     3839,
+     5350,
+     1708,
+     1678,
+     7481,
+     3843,
+     1743,
+     1693
+    ],
+    "categories": {
+     "supported_player_categoryids": [
+      2,
+      1
+     ],
+     "feature_categoryids": [
+      62
+     ]
+    },
+    "reviews": {
+     "summary_filtered": {
+      "review_count": 269,
+      "percent_positive": 65,
+      "review_score": 5,
+      "review_score_label": "Mixed"
+     }
+    },
+    "basic_info": {
+     "short_description": "The most devastating mechanized armor to ever roll onto a battlefield is brought to life in Iron Warriors: T72-Tank Command. ",
+     "publishers": [
+      {
+       "name": "Strategy First",
+       "creator_clan_account_id": 32949234
+      }
+     ],
+     "developers": [
+      {
+       "name": "Crazy House"
+      }
+     ]
+    },
+    "tags": [
+     {
+      "tagid": 599,
+      "weight": 924
+     },
+     {
+      "tagid": 9,
+      "weight": 759
+     },
+     {
+      "tagid": 13276,
+      "weight": 726
+     },
+     {
+      "tagid": 4168,
+      "weight": 706
+     },
+     {
+      "tagid": 19,
+      "weight": 679
+     },
+     {
+      "tagid": 4182,
+      "weight": 673
+     },
+     {
+      "tagid": 5179,
+      "weight": 640
+     },
+     {
+      "tagid": 4175,
+      "weight": 594
+     },
+     {
+      "tagid": 113,
+      "weight": 501
+     },
+     {
+      "tagid": 1774,
+      "weight": 501
+     },
+     {
+      "tagid": 3814,
+      "weight": 488
+     },
+     {
+      "tagid": 4684,
+      "weight": 468
+     },
+     {
+      "tagid": 3839,
+      "weight": 442
+     },
+     {
+      "tagid": 5350,
+      "weight": 389
+     },
+     {
+      "tagid": 1708,
+      "weight": 323
+     },
+     {
+      "tagid": 1678,
+      "weight": 283
+     },
+     {
+      "tagid": 7481,
+      "weight": 270
+     },
+     {
+      "tagid": 3843,
+      "weight": 244
+     },
+     {
+      "tagid": 1743,
+      "weight": 204
+     },
+     {
+      "tagid": 1693,
+      "weight": 178
+     }
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/1670/${FILENAME}?t=1775918963",
+     "main_capsule": "54a8813d7f2d8fc18cc541408bc84ad2eb4e53ae/capsule_616x353.jpg",
+     "main_capsule_2x": "54a8813d7f2d8fc18cc541408bc84ad2eb4e53ae/capsule_616x353_2x.jpg",
+     "small_capsule": "478fa77f994b888b53c7f60e4c7f2022c983d272/capsule_231x87.jpg",
+     "small_capsule_2x": "478fa77f994b888b53c7f60e4c7f2022c983d272/capsule_231x87_2x.jpg",
+     "header": "68fa2dd65f58717b9e593c04f0f92d51d58020cd/header.jpg",
+     "header_2x": "68fa2dd65f58717b9e593c04f0f92d51d58020cd/header_2x.jpg",
+     "hero_capsule": "7e59dca8eab8d66bab96b0cde17cfbe90c46e33e/hero_capsule.jpg",
+     "hero_capsule_2x": "7e59dca8eab8d66bab96b0cde17cfbe90c46e33e/hero_capsule_2x.jpg",
+     "library_capsule": "077586613455f6ce4b928237e009d4cf6cc713e9/library_capsule.jpg",
+     "library_capsule_2x": "077586613455f6ce4b928237e009d4cf6cc713e9/library_capsule_2x.jpg",
+     "library_hero": "625ba9d46d029e3d7ba3f7ddd026988092b1518f/library_hero.jpg",
+     "library_hero_2x": "625ba9d46d029e3d7ba3f7ddd026988092b1518f/library_hero_2x.jpg",
+     "community_icon": "27d2e23e260d8aa543e91b0fae13537f26d9f48b",
+     "page_background_path": "app/1670?t=1775918963",
+     "last_modified": 1775918963
+    },
+    "release": {
+     "steam_release_date": 1153897200
+    },
+    "platforms": {
+     "windows": true,
+     "vr_support": {},
+     "steam_deck_compat_category": 0,
+     "steam_os_compat_category": 0,
+     "steam_frame_compat_category": 0,
+     "steam_machine_compat_category": 0
+    },
+    "best_purchase_option": {
+     "packageid": 104,
+     "purchase_option_name": "Iron Warriors: T-72 Tank Command",
+     "final_price_in_cents": "71",
+     "original_price_in_cents": "359",
+     "formatted_final_price": "$0.71",
+     "formatted_original_price": "$3.59",
+     "discount_pct": 80,
+     "active_discounts": [
+      {
+       "discount_amount": "288",
+       "discount_description": "#discount_desc_preset_special",
+       "discount_end_date": 1790874000
+      }
+     ],
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 1620,
+    "success": 1,
+    "visible": true,
+    "name": "Jagged Alliance 2 Gold",
+    "store_url_path": "app/1620/Jagged_Alliance_2_Gold",
+    "store_url_slug": "Jagged_Alliance_2_Gold",
+    "appid": 1620,
+    "type": 0,
+    "content_descriptorids": [
+     5
+    ],
+    "tagids": [
+     9,
+     1708,
+     14139,
+     1693,
+     4325,
+     5851,
+     1677,
+     1741,
+     1695,
+     122,
+     4182,
+     21725,
+     4026,
+     4711,
+     19,
+     1669,
+     4166,
+     4667,
+     4168
+    ],
+    "categories": {
+     "supported_player_categoryids": [
+      2
+     ],
+     "feature_categoryids": [
+      62
+     ]
+    },
+    "reviews": {
+     "summary_filtered": {
+      "review_count": 0,
+      "percent_positive": 0,
+      "review_score": 0,
+      "review_score_label": "No user reviews"
+     }
+    },
+    "basic_info": {
+     "publishers": [
+      {
+       "name": "Strategy First",
+       "creator_clan_account_id": 32949234
+      }
+     ],
+     "developers": [
+      {
+       "name": "Sir-Tech"
+      }
+     ],
+     "franchises": [
+      {
+       "name": "Jagged Alliance"
+      }
+     ]
+    },
+    "tags": [
+     {
+      "tagid": 9,
+      "weight": 1481
+     },
+     {
+      "tagid": 1708,
+      "weight": 1213
+     },
+     {
+      "tagid": 14139,
+      "weight": 1123
+     },
+     {
+      "tagid": 1693,
+      "weight": 1060
+     },
+     {
+      "tagid": 4325,
+      "weight": 817
+     },
+     {
+      "tagid": 5851,
+      "weight": 766
+     },
+     {
+      "tagid": 1677,
+      "weight": 753
+     },
+     {
+      "tagid": 1741,
+      "weight": 510
+     },
+     {
+      "tagid": 1695,
+      "weight": 498
+     },
+     {
+      "tagid": 122,
+      "weight": 485
+     },
+     {
+      "tagid": 4182,
+      "weight": 383
+     },
+     {
+      "tagid": 21725,
+      "weight": 166
+     },
+     {
+      "tagid": 4026,
+      "weight": 153
+     },
+     {
+      "tagid": 4711,
+      "weight": 140
+     },
+     {
+      "tagid": 19,
+      "weight": 114
+     },
+     {
+      "tagid": 1669,
+      "weight": 102
+     },
+     {
+      "tagid": 4166,
+      "weight": 89
+     },
+     {
+      "tagid": 4667,
+      "weight": 76
+     },
+     {
+      "tagid": 4168,
+      "weight": 63
+     }
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/1620/${FILENAME}?t=1764098252",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "library_capsule": "library_600x900.jpg",
+     "library_capsule_2x": "library_600x900_2x.jpg",
+     "library_hero": "library_hero.jpg",
+     "community_icon": "1efe0167bdb1740d7fc281ba21ad06ed8f097e0e",
+     "page_background_path": "app/1620?t=1764098252",
+     "last_modified": 1764098252
+    },
+    "release": {
+     "steam_release_date": 1152169200
+    },
+    "platforms": {
+     "windows": true,
+     "vr_support": {},
+     "steam_deck_compat_category": 0,
+     "steam_os_compat_category": 0,
+     "steam_frame_compat_category": 0,
+     "steam_machine_compat_category": 0
+    },
+    "best_purchase_option": {
+     "packageid": 94,
+     "purchase_option_name": "Jagged Alliance 2 Gold",
+     "final_price_in_cents": "1049",
+     "formatted_final_price": "$10.49",
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 23455,
+    "success": 1,
+    "visible": true,
+    "name": "Grand Ages: Rome - Reign of Augustus",
+    "store_url_path": "app/23455/Grand_Ages_Rome_Reign_of_Augustus",
+    "store_url_slug": "Grand_Ages_Rome_Reign_of_Augustus",
+    "appid": 23455,
+    "type": 0,
+    "tagids": [
+     9,
+     599,
+     4328,
+     6948,
+     3987
+    ],
+    "categories": {
+     "supported_player_categoryids": [
+      1
+     ],
+     "feature_categoryids": [
+      62
+     ]
+    },
+    "reviews": {
+     "summary_filtered": {
+      "review_count": 0,
+      "percent_positive": 0,
+      "review_score": 0,
+      "review_score_label": "No user reviews"
+     }
+    },
+    "basic_info": {
+     "publishers": [
+      {
+       "name": "Kalypso Media Digital",
+       "creator_clan_account_id": 876623
+      }
+     ],
+     "developers": [
+      {
+       "name": "Haemimont Games"
+      }
+     ]
+    },
+    "tags": [
+     {
+      "tagid": 9,
+      "weight": 3738
+     },
+     {
+      "tagid": 599,
+      "weight": 3084
+     },
+     {
+      "tagid": 4328,
+      "weight": 1401
+     },
+     {
+      "tagid": 6948,
+      "weight": 1214
+     },
+     {
+      "tagid": 3987,
+      "weight": 560
+     }
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/23455/${FILENAME}?t=1644250361",
+     "small_capsule": "capsule_231x87.jpg",
+     "header": "header.jpg",
+     "header_2x": "header.jpg",
+     "page_background_path": "app/23455?t=1644250361",
+     "last_modified": 1644250361
+    },
+    "release": {
+     "steam_release_date": 1264614960
+    },
+    "platforms": {
+     "windows": true,
+     "vr_support": {},
+     "steam_deck_compat_category": 0,
+     "steam_os_compat_category": 0,
+     "steam_frame_compat_category": 0,
+     "steam_machine_compat_category": 0
+    },
+    "best_purchase_option": {
+     "packageid": 2854,
+     "purchase_option_name": "Grand Ages: Rome - Reign of Augustus",
+     "final_price_in_cents": "699",
+     "formatted_final_price": "$6.99",
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 0,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 4964730,
+    "success": 1,
+    "visible": true,
+    "name": "MapCity",
+    "store_url_path": "app/4964730/MapCity",
+    "store_url_slug": "MapCity",
+    "appid": 4964730,
+    "type": 0,
+    "is_early_access": true,
+    "tagids": [
+     599,
+     4328,
+     3871,
+     4094,
+     4791,
+     1643,
+     12472,
+     1654,
+     9,
+     492,
+     493,
+     597,
+     1669,
+     4182,
+     7926
+    ],
+    "categories": {
+     "supported_player_categoryids": [
+      2
+     ],
+     "feature_categoryids": [
+      22,
+      62
+     ]
+    },
+    "reviews": {
+     "summary_filtered": {
+      "review_count": 39,
+      "percent_positive": 82,
+      "review_score": 7,
+      "review_score_label": "Positive"
+     }
+    },
+    "basic_info": {
+     "short_description": "MapCity is an Early Access sandbox for drawing and editing cities, not a traditional city management game. You create roads, buildings, and landscapes on a blank map or optional real map data. Expect a different workflow, a learning curve, and rough edges.",
+     "publishers": [
+      {
+       "name": "Permadyn Interactive",
+       "creator_clan_account_id": 46215649
+      }
+     ],
+     "developers": [
+      {
+       "name": "Permadyn Interactive",
+       "creator_clan_account_id": 46215649
+      }
+     ]
+    },
+    "tags": [
+     {
+      "tagid": 599,
+      "weight": 1634
+     },
+     {
+      "tagid": 4328,
+      "weight": 1009
+     },
+     {
+      "tagid": 3871,
+      "weight": 913
+     },
+     {
+      "tagid": 4094,
+      "weight": 865
+     },
+     {
+      "tagid": 4791,
+      "weight": 769
+     },
+     {
+      "tagid": 1643,
+      "weight": 625
+     },
+     {
+      "tagid": 12472,
+      "weight": 600
+     },
+     {
+      "tagid": 1654,
+      "weight": 528
+     },
+     {
+      "tagid": 9,
+      "weight": 504
+     },
+     {
+      "tagid": 492,
+      "weight": 504
+     },
+     {
+      "tagid": 493,
+      "weight": 504
+     },
+     {
+      "tagid": 597,
+      "weight": 504
+     },
+     {
+      "tagid": 1669,
+      "weight": 456
+     },
+     {
+      "tagid": 4182,
+      "weight": 456
+     },
+     {
+      "tagid": 7926,
+      "weight": 120
+     }
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/4964730/${FILENAME}?t=1790371966",
+     "main_capsule": "d6cc0d93e8d940825397185227d5f3ddbf9b7693/capsule_616x353.jpg",
+     "main_capsule_2x": "d6cc0d93e8d940825397185227d5f3ddbf9b7693/capsule_616x353_2x.jpg",
+     "small_capsule": "e7e0c90429c6d6adbfbfbb2b693443f0283b4a61/capsule_231x87.jpg",
+     "small_capsule_2x": "e7e0c90429c6d6adbfbfbb2b693443f0283b4a61/capsule_231x87_2x.jpg",
+     "header": "8ee73c373fc15ab0ba5bf8276bf679014f181c04/header.jpg",
+     "header_2x": "8ee73c373fc15ab0ba5bf8276bf679014f181c04/header_2x.jpg",
+     "page_background": "de56f38fc331f0f0b43f883af562bae035ab5978/page_bg_v6.jpg",
+     "hero_capsule": "a5a6e07796a45cd1b800588d3310a86411c9cae9/hero_capsule.jpg",
+     "hero_capsule_2x": "a5a6e07796a45cd1b800588d3310a86411c9cae9/hero_capsule_2x.jpg",
+     "library_capsule": "a74b8258e6456ee1a16ac2eb147b99706bae195a/library_capsule.jpg",
+     "library_capsule_2x": "a74b8258e6456ee1a16ac2eb147b99706bae195a/library_capsule_2x.jpg",
+     "library_hero": "9a05d34b786d06c4476fb6695512bbcbe24355d5/library_hero.jpg",
+     "library_hero_2x": "9a05d34b786d06c4476fb6695512bbcbe24355d5/library_hero_2x.jpg",
+     "community_icon": "53c9363822448c630eb485573ca715c431001645",
+     "page_background_path": "app/4964730?t=1790371966",
+     "raw_page_background": "de56f38fc331f0f0b43f883af562bae035ab5978/page_bg_raw.jpg",
+     "last_modified": 1790371966
+    },
+    "release": {
+     "steam_release_date": 1789481260,
+     "is_early_access": true
+    },
+    "platforms": {
+     "windows": true,
+     "mac": true,
+     "vr_support": {},
+     "steam_deck_compat_category": 0,
+     "steam_os_compat_category": 0,
+     "steam_frame_compat_category": 0,
+     "steam_machine_compat_category": 0
+    },
+    "best_purchase_option": {
+     "packageid": 1722815,
+     "purchase_option_name": "MapCity",
+     "final_price_in_cents": "855",
+     "formatted_final_price": "$8.55",
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   },
+   {
+    "item_type": 0,
+    "id": 4965030,
+    "success": 1,
+    "visible": true,
+    "name": "Adult Fixture Game",
+    "store_url_path": "app/4965030/Adult_Fixture_Game",
+    "store_url_slug": "Adult_Fixture_Game",
+    "appid": 4965030,
+    "type": 0,
+    "content_descriptorids": [
+     1,
+     3,
+     4,
+     5
+    ],
+    "tagids": [
+     3799,
+     599,
+     4947,
+     21,
+     9551,
+     6426,
+     12095,
+     6971,
+     4085,
+     5608,
+     6650,
+     4182,
+     9130
+    ],
+    "categories": {
+     "supported_player_categoryids": [
+      2
+     ],
+     "feature_categoryids": [
+      22,
+      62
+     ],
+     "controller_categoryids": [
+      28
+     ]
+    },
+    "reviews": {
+     "summary_filtered": {
+      "review_count": 0,
+      "percent_positive": 0,
+      "review_score": 0,
+      "review_score_label": "No user reviews"
+     }
+    },
+    "basic_info": {
+     "short_description": "Neutral placeholder description used in parser tests.",
+     "publishers": [
+      {
+       "name": "Fixture Studio"
+      }
+     ],
+     "developers": [
+      {
+       "name": "Fixture Studio"
+      }
+     ]
+    },
+    "tags": [
+     {
+      "tagid": 3799,
+      "weight": 1129
+     },
+     {
+      "tagid": 599,
+      "weight": 1105
+     },
+     {
+      "tagid": 4947,
+      "weight": 988
+     },
+     {
+      "tagid": 21,
+      "weight": 964
+     },
+     {
+      "tagid": 9551,
+      "weight": 917
+     },
+     {
+      "tagid": 6426,
+      "weight": 847
+     },
+     {
+      "tagid": 12095,
+      "weight": 823
+     },
+     {
+      "tagid": 6971,
+      "weight": 776
+     },
+     {
+      "tagid": 4085,
+      "weight": 588
+     },
+     {
+      "tagid": 5608,
+      "weight": 541
+     },
+     {
+      "tagid": 6650,
+      "weight": 470
+     },
+     {
+      "tagid": 4182,
+      "weight": 447
+     },
+     {
+      "tagid": 9130,
+      "weight": 400
+     }
+    ],
+    "assets": {
+     "asset_url_format": "steam/apps/4965030/${FILENAME}?t=1789755126",
+     "main_capsule": "447a57bc7c862d94cadff250ab8f7c6c4b972e9c/capsule_616x353.jpg",
+     "main_capsule_2x": "447a57bc7c862d94cadff250ab8f7c6c4b972e9c/capsule_616x353_2x.jpg",
+     "small_capsule": "fbd2721673d071d9e48986c9b92bb297ff73685c/capsule_231x87.jpg",
+     "small_capsule_2x": "fbd2721673d071d9e48986c9b92bb297ff73685c/capsule_231x87_2x.jpg",
+     "header": "56d4b9b7b35bcf2dd579ac4ab695743131fda0e5/header.jpg",
+     "header_2x": "56d4b9b7b35bcf2dd579ac4ab695743131fda0e5/header_2x.jpg",
+     "page_background": "1180f101edfb2bd331d1246bfd0e58f754fec0c5/page_bg_v6.jpg",
+     "hero_capsule": "9712b5f5acc911ecbb0ab90c9003c5199432452d/hero_capsule.jpg",
+     "hero_capsule_2x": "9712b5f5acc911ecbb0ab90c9003c5199432452d/hero_capsule_2x.jpg",
+     "library_capsule": "ce436941fcefe9b3f35538fd7e3b259cfbbd7f48/library_capsule.jpg",
+     "library_capsule_2x": "ce436941fcefe9b3f35538fd7e3b259cfbbd7f48/library_capsule_2x.jpg",
+     "library_hero": "b58119a2f2ff3454e659e8e56984067cbb786076/library_hero.jpg",
+     "library_hero_2x": "b58119a2f2ff3454e659e8e56984067cbb786076/library_hero_2x.jpg",
+     "community_icon": "1c48c15d95f0e1290d25e79b66ba6d8a29f56c7b",
+     "page_background_path": "app/4965030?t=1789755126",
+     "raw_page_background": "1180f101edfb2bd331d1246bfd0e58f754fec0c5/page_bg_raw.jpg",
+     "last_modified": 1789755126
+    },
+    "release": {
+     "steam_release_date": 1789755127
+    },
+    "platforms": {
+     "windows": true,
+     "mac": true,
+     "steamos_linux": true,
+     "vr_support": {},
+     "steam_deck_compat_category": 0,
+     "steam_os_compat_category": 0,
+     "steam_frame_compat_category": 0,
+     "steam_machine_compat_category": 0
+    },
+    "best_purchase_option": {
+     "packageid": 1722908,
+     "purchase_option_name": "Adult Fixture Game",
+     "final_price_in_cents": "281",
+     "original_price_in_cents": "469",
+     "formatted_final_price": "$2.81",
+     "formatted_original_price": "$4.69",
+     "discount_pct": 40,
+     "active_discounts": [
+      {
+       "discount_amount": "188",
+       "discount_description": "#discount_desc_preset_launch",
+       "discount_end_date": 1790960404
+      }
+     ],
+     "user_can_purchase_as_gift": true,
+     "hide_discount_pct_for_compliance": false,
+     "included_game_count": 1,
+     "must_purchase_as_set": false,
+     "package_group": "default",
+     "price_cannot_be_displayed_as_discount": false
+    }
+   }
+  ]
+ }
+}

@@ -1,0 +1,23 @@
+[package]
+name = "gamelib"
+description = "GameLib desktop app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+# Desktop only: no staticlib/cdylib (those are for mobile targets).
+name = "gamelib_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+tauri-plugin-opener = "2.6"
+gamelib-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

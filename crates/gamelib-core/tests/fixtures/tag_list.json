@@ -1,0 +1,351 @@
+{
+ "response": {
+  "version_hash": "163593535",
+  "tags": [
+   {
+    "tagid": 9,
+    "name": "Strateji"
+   },
+   {
+    "tagid": 19,
+    "name": "Aksiyon"
+   },
+   {
+    "tagid": 21,
+    "name": "Macera"
+   },
+   {
+    "tagid": 113,
+    "name": "Oynaması Ücretsiz"
+   },
+   {
+    "tagid": 122,
+    "name": "RYO"
+   },
+   {
+    "tagid": 492,
+    "name": "Bağımsız"
+   },
+   {
+    "tagid": 493,
+    "name": "Erken Erişim"
+   },
+   {
+    "tagid": 597,
+    "name": "Basit Eğlence"
+   },
+   {
+    "tagid": 599,
+    "name": "Simülasyon"
+   },
+   {
+    "tagid": 1643,
+    "name": "İnşa Etme"
+   },
+   {
+    "tagid": 1645,
+    "name": "Kule Savunması"
+   },
+   {
+    "tagid": 1654,
+    "name": "Rahatlatıcı"
+   },
+   {
+    "tagid": 1662,
+    "name": "Hayatta Kalma"
+   },
+   {
+    "tagid": 1663,
+    "name": "FPS"
+   },
+   {
+    "tagid": 1669,
+    "name": "Modlanabilir"
+   },
+   {
+    "tagid": 1676,
+    "name": "GZS"
+   },
+   {
+    "tagid": 1677,
+    "name": "Sıra Tabanlı"
+   },
+   {
+    "tagid": 1678,
+    "name": "Savaş"
+   },
+   {
+    "tagid": 1684,
+    "name": "Fantezi"
+   },
+   {
+    "tagid": 1685,
+    "name": "Eşli"
+   },
+   {
+    "tagid": 1693,
+    "name": "Klasik"
+   },
+   {
+    "tagid": 1695,
+    "name": "Açık Dünya"
+   },
+   {
+    "tagid": 1702,
+    "name": "Üretim"
+   },
+   {
+    "tagid": 1708,
+    "name": "Taktiksel"
+   },
+   {
+    "tagid": 1718,
+    "name": "MOBA"
+   },
+   {
+    "tagid": 1719,
+    "name": "Komedi"
+   },
+   {
+    "tagid": 1741,
+    "name": "Sıra Tabanlı Strateji"
+   },
+   {
+    "tagid": 1743,
+    "name": "Dövüş"
+   },
+   {
+    "tagid": 1774,
+    "name": "Nişancı"
+   },
+   {
+    "tagid": 1775,
+    "name": "PvP"
+   },
+   {
+    "tagid": 3799,
+    "name": "Görsel Roman"
+   },
+   {
+    "tagid": 3814,
+    "name": "TPS"
+   },
+   {
+    "tagid": 3839,
+    "name": "Birinci Şahıs"
+   },
+   {
+    "tagid": 3843,
+    "name": "Çevrimiçi Eşli Oyun"
+   },
+   {
+    "tagid": 3859,
+    "name": "Çok Oyunculu"
+   },
+   {
+    "tagid": 3871,
+    "name": "2D"
+   },
+   {
+    "tagid": 3878,
+    "name": "Rekabetçi"
+   },
+   {
+    "tagid": 3916,
+    "name": "Eski Usul"
+   },
+   {
+    "tagid": 3987,
+    "name": "Tarihsel"
+   },
+   {
+    "tagid": 4026,
+    "name": "Zor"
+   },
+   {
+    "tagid": 4085,
+    "name": "Anime"
+   },
+   {
+    "tagid": 4094,
+    "name": "Minimalist"
+   },
+   {
+    "tagid": 4136,
+    "name": "Komik"
+   },
+   {
+    "tagid": 4155,
+    "name": "Sınıf Tabanlı"
+   },
+   {
+    "tagid": 4166,
+    "name": "Atmosferik"
+   },
+   {
+    "tagid": 4168,
+    "name": "Askerî"
+   },
+   {
+    "tagid": 4175,
+    "name": "Gerçekçi"
+   },
+   {
+    "tagid": 4182,
+    "name": "Tek Oyunculu"
+   },
+   {
+    "tagid": 4195,
+    "name": "Çizgi Filmvari"
+   },
+   {
+    "tagid": 4202,
+    "name": "Takas"
+   },
+   {
+    "tagid": 4231,
+    "name": "Aksiyon RYO"
+   },
+   {
+    "tagid": 4325,
+    "name": "Sıra Tabanlı Savaş"
+   },
+   {
+    "tagid": 4328,
+    "name": "Şehir Kurma"
+   },
+   {
+    "tagid": 4562,
+    "name": "Çizgi Film"
+   },
+   {
+    "tagid": 4667,
+    "name": "Şiddet"
+   },
+   {
+    "tagid": 4684,
+    "name": "Savaş Oyunu"
+   },
+   {
+    "tagid": 4711,
+    "name": "Tekrar Oynanabilir"
+   },
+   {
+    "tagid": 4747,
+    "name": "Karakter Kişiselleştirme"
+   },
+   {
+    "tagid": 4791,
+    "name": "Üstten Görünüş"
+   },
+   {
+    "tagid": 4947,
+    "name": "Romantik"
+   },
+   {
+    "tagid": 5055,
+    "name": "E-spor"
+   },
+   {
+    "tagid": 5154,
+    "name": "Puan Yarışı"
+   },
+   {
+    "tagid": 5179,
+    "name": "Soğuk Savaş"
+   },
+   {
+    "tagid": 5350,
+    "name": "Aile Dostu"
+   },
+   {
+    "tagid": 5608,
+    "name": "Duygusal"
+   },
+   {
+    "tagid": 5711,
+    "name": "Takım Tabanlı"
+   },
+   {
+    "tagid": 5752,
+    "name": "Robotlar"
+   },
+   {
+    "tagid": 5851,
+    "name": "İzometrik"
+   },
+   {
+    "tagid": 6426,
+    "name": "Önemli Seçimler"
+   },
+   {
+    "tagid": 6650,
+    "name": "Çıplaklık"
+   },
+   {
+    "tagid": 6691,
+    "name": "1990'lar"
+   },
+   {
+    "tagid": 6948,
+    "name": "Roma"
+   },
+   {
+    "tagid": 6971,
+    "name": "Birden Fazla Son"
+   },
+   {
+    "tagid": 7481,
+    "name": "Kontrolcü"
+   },
+   {
+    "tagid": 7743,
+    "name": "1980'ler"
+   },
+   {
+    "tagid": 7926,
+    "name": "Yapay Zekâ"
+   },
+   {
+    "tagid": 9130,
+    "name": "Hentai"
+   },
+   {
+    "tagid": 9551,
+    "name": "İlişki Simülatörü"
+   },
+   {
+    "tagid": 12095,
+    "name": "Cinsel İçerik"
+   },
+   {
+    "tagid": 12472,
+    "name": "Yönetim"
+   },
+   {
+    "tagid": 13276,
+    "name": "Tank"
+   },
+   {
+    "tagid": 14139,
+    "name": "Sıra Tabanlı Taktik"
+   },
+   {
+    "tagid": 14720,
+    "name": "Nostalji"
+   },
+   {
+    "tagid": 21725,
+    "name": "Taktiksel RYO"
+   },
+   {
+    "tagid": 97070,
+    "name": "Suikastçılar"
+   },
+   {
+    "tagid": 620519,
+    "name": "Kahraman Merkezli Nişancı"
+   }
+  ]
+ }
+}

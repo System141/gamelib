@@ -1,0 +1,424 @@
+//! Data shapes shared with the frontend (serialized as camelCase JSON).
+//!
+//! Keep in sync with `src/lib/types.ts`.
+
+use serde::{Deserialize, Serialize};
+
+// ---------------------------------------------------------------------------
+// Catalog queries
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SortKey {
+    /// Exact name match first, then prefix matches, then popularity. Only meaningful with a search.
+    Relevance,
+    #[default]
+    Popular,
+    Rating,
+    Newest,
+    Oldest,
+    Name,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Platform {
+    Win,
+    Mac,
+    Linux,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeckFilter {
+    /// Playable or verified.
+    Playable,
+    Verified,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GameQuery {
+    pub search: Option<String>,
+    /// Every listed tag must match.
+    pub tags: Vec<u32>,
+    /// Every listed platform must be supported.
+    pub platforms: Vec<Platform>,
+    pub deck: Option<DeckFilter>,
+    pub free_only: bool,
+    /// Minimum Steam review score (1–9).
+    pub min_review_score: Option<u8>,
+    pub show_adult: bool,
+    pub released_within_days: Option<u32>,
+    pub has_links: bool,
+    pub sort: SortKey,
+    pub offset: u32,
+    /// Clamped to 1..=200; 0 means the default page size.
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameCard {
+    pub appid: u32,
+    pub name: String,
+    /// Portrait library capsule (300×450).
+    pub capsule: Option<String>,
+    /// Portrait library capsule at 2x (600×900).
+    pub capsule_2x: Option<String>,
+    /// Landscape header (460×215), used as fallback art.
+    pub header: Option<String>,
+    pub release_date: Option<i64>,
+    pub is_free: bool,
+    pub is_early_access: bool,
+    pub price: Option<String>,
+    pub original_price: Option<String>,
+    pub discount_pct: u8,
+    /// Steam review score: 0 = none, 1 (overwhelmingly negative) … 9 (overwhelmingly positive).
+    pub review_score: u8,
+    pub review_pct: u8,
+    pub review_count: u32,
+    pub win: bool,
+    pub mac: bool,
+    pub linux: bool,
+    /// Steam Deck compatibility: 0 unknown, 1 unsupported, 2 playable, 3 verified.
+    pub deck: u8,
+    pub top_tags: Vec<u32>,
+    pub link_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameDetail {
+    #[serde(flatten)]
+    pub card: GameCard,
+    pub short_description: Option<String>,
+    pub developers: Vec<String>,
+    pub publishers: Vec<String>,
+    pub franchises: Vec<String>,
+    pub tags: Vec<u32>,
+    /// Steam content descriptor ids (1 some nudity, 2 violence, 3 adult sexual, 4 frequent nudity, 5 mature).
+    pub descriptors: Vec<u32>,
+    pub original_release_date: Option<i64>,
+    /// Wide library hero image (1920×620), if the game has one.
+    pub hero: Option<String>,
+    pub store_url: String,
+    pub adult: bool,
+    pub delisted: bool,
+    pub first_seen_at: i64,
+    pub synced_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GamePage {
+    pub total: u32,
+    pub items: Vec<GameCard>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagInfo {
+    pub tagid: u32,
+    pub name: String,
+    pub game_count: u32,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameMedia {
+    /// Turkish short description, when the developer provided one.
+    pub description_tr: Option<String>,
+    pub screenshots: Vec<Screenshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Screenshot {
+    /// 600×338 thumbnail.
+    pub thumb: String,
+    /// 1920×1080 image.
+    pub full: String,
+    /// Listed by Steam as containing mature content.
+    pub mature: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogStatus {
+    pub game_count: u32,
+    pub tag_count: u32,
+    pub linked_game_count: u32,
+    pub last_sync_at: Option<i64>,
+    pub last_new_releases_at: Option<i64>,
+    /// An interrupted full sync can be resumed.
+    pub resumable: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Sync
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerKind {
+    Full,
+    NewReleases,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncPhase {
+    Starting,
+    Tags,
+    Featured,
+    Catalog,
+    NewReleases,
+    Finalizing,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncProgress {
+    pub kind: WorkerKind,
+    pub phase: SyncPhase,
+    pub fetched: u32,
+    /// 0 when unknown (new releases).
+    pub total: u32,
+    pub page: u32,
+    pub pages: u32,
+    pub started_at: i64,
+    pub resumed: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncReport {
+    /// Games Steam reported for the query.
+    pub total: u32,
+    /// Games stored or refreshed during this run.
+    pub seen: u32,
+    /// Games stored for the first time during this run.
+    pub inserted: u32,
+    /// Games no longer on the store, now hidden.
+    pub delisted: u32,
+    /// Store items that could not be parsed.
+    pub skipped: u32,
+    pub requests: u32,
+    pub retries: u32,
+    pub duration_ms: u64,
+    /// Delisting was skipped because the run did not see enough of the catalog.
+    pub prune_skipped: bool,
+    pub resumed: bool,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewReleasesReport {
+    /// Distinct games returned by Steam and stored.
+    pub fetched: u32,
+    /// Games that were not in the catalog before.
+    pub inserted: u32,
+    pub updated: u32,
+    pub pages: u32,
+    /// Stopped at the page limit before reaching the previous check; a full sync is recommended.
+    pub partial: bool,
+    /// Releases on or after this Unix time were requested.
+    pub since: i64,
+    pub watermark: Option<i64>,
+    pub requests: u32,
+    pub retries: u32,
+    pub duration_ms: u64,
+}
+
+// ---------------------------------------------------------------------------
+// External (non-Steam) links
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkKind {
+    #[default]
+    Download,
+    Page,
+}
+
+impl LinkKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LinkKind::Download => "download",
+            LinkKind::Page => "page",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "page" => LinkKind::Page,
+            _ => LinkKind::Download,
+        }
+    }
+}
+
+impl Platform {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Platform::Win => "win",
+            Platform::Mac => "mac",
+            Platform::Linux => "linux",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "win" => Some(Platform::Win),
+            "mac" => Some(Platform::Mac),
+            "linux" => Some(Platform::Linux),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiteInfo {
+    pub id: String,
+    pub name: String,
+    pub homepage: Option<String>,
+    pub domains: Vec<String>,
+    /// Badge colour (#rrggbb).
+    pub color: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkInput {
+    /// Set to update an existing link.
+    #[serde(default)]
+    pub id: Option<i64>,
+    pub appid: u32,
+    pub url: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub kind: LinkKind,
+    #[serde(default)]
+    pub platform: Option<Platform>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckStatus {
+    /// The final response was 2xx.
+    Ok,
+    /// The final response was 4xx/5xx or a redirect had no target.
+    Broken,
+    Loop,
+    TooManyRedirects,
+    Timeout,
+    Network,
+    Tls,
+    /// A redirect pointed to a non-HTTP scheme (e.g. a custom app protocol).
+    UnsupportedScheme,
+}
+
+impl CheckStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CheckStatus::Ok => "ok",
+            CheckStatus::Broken => "broken",
+            CheckStatus::Loop => "loop",
+            CheckStatus::TooManyRedirects => "too_many_redirects",
+            CheckStatus::Timeout => "timeout",
+            CheckStatus::Network => "network",
+            CheckStatus::Tls => "tls",
+            CheckStatus::UnsupportedScheme => "unsupported_scheme",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "ok" => CheckStatus::Ok,
+            "loop" => CheckStatus::Loop,
+            "too_many_redirects" => CheckStatus::TooManyRedirects,
+            "timeout" => CheckStatus::Timeout,
+            "network" => CheckStatus::Network,
+            "tls" => CheckStatus::Tls,
+            "unsupported_scheme" => CheckStatus::UnsupportedScheme,
+            _ => CheckStatus::Broken,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Hop {
+    pub url: String,
+    pub status: u16,
+}
+
+/// Result of following a link's HTTP redirects without downloading it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkCheck {
+    pub status: CheckStatus,
+    pub http_status: Option<u16>,
+    pub final_url: Option<String>,
+    pub final_host: Option<String>,
+    pub hops: Vec<Hop>,
+    pub file_name: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub content_type: Option<String>,
+    /// The final response looks like a downloadable file rather than a web page.
+    pub is_file: bool,
+    pub checked_at: i64,
+    pub message: Option<String>,
+}
+
+impl LinkCheck {
+    /// Number of redirects followed.
+    pub fn redirects(&self) -> u32 {
+        self.hops.len().saturating_sub(1) as u32
+    }
+}
+
+/// The last [`LinkCheck`] as stored with the link.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkCheckSummary {
+    pub status: CheckStatus,
+    pub http_status: Option<u16>,
+    pub resolved_url: Option<String>,
+    pub final_host: Option<String>,
+    pub redirects: u32,
+    pub file_name: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub content_type: Option<String>,
+    pub is_file: bool,
+    pub checked_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameLink {
+    pub id: i64,
+    pub appid: u32,
+    pub site_id: String,
+    pub url: String,
+    pub host: String,
+    pub label: Option<String>,
+    pub kind: LinkKind,
+    pub platform: Option<Platform>,
+    pub version: Option<String>,
+    pub notes: Option<String>,
+    /// Plain `http://` link.
+    pub insecure: bool,
+    pub last_check: Option<LinkCheckSummary>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
