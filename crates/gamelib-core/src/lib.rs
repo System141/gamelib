@@ -4,7 +4,9 @@
 //! - [`db`]: local SQLite catalog (WAL, FTS5 search) plus user data such as external links.
 //! - [`sync`] / [`new_releases`]: full catalog download and on-demand "new releases" refresh.
 //! - [`links`]: validation, per-site handlers and redirect checks for non-Steam links.
+//! - [`app`]: the command layer shared by the desktop app and `gamelib-cli serve`.
 
+pub mod app;
 pub mod db;
 pub mod error;
 pub mod links;
@@ -20,7 +22,7 @@ mod text;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub use error::{Error, ErrorKind, Result};
+pub use error::{Error, ErrorInfo, ErrorKind, Result};
 
 /// Current Unix time in seconds.
 pub fn unix_now() -> i64 {

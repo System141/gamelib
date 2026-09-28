@@ -4,6 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::ErrorInfo;
+
 // ---------------------------------------------------------------------------
 // Catalog queries
 // ---------------------------------------------------------------------------
@@ -231,6 +233,45 @@ pub struct NewReleasesReport {
     pub requests: u32,
     pub retries: u32,
     pub duration_ms: u64,
+}
+
+/// What `get_status` returns: catalog counts plus the running job, if any.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppStatus {
+    #[serde(flatten)]
+    pub catalog: CatalogStatus,
+    pub worker: Option<WorkerKind>,
+    /// Latest progress of the running job, so a reloaded UI catches up without waiting.
+    pub progress: Option<SyncProgress>,
+    pub db_path: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+/// Payload of the `sync:finished` event, sent exactly once per job.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncFinished {
+    pub kind: WorkerKind,
+    pub outcome: Outcome,
+    pub report: Option<SyncReport>,
+    pub new_releases: Option<NewReleasesReport>,
+    pub error: Option<ErrorInfo>,
+}
+
+/// Where `open_in_steam` opens a game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenTarget {
+    Web,
+    Client,
 }
 
 // ---------------------------------------------------------------------------

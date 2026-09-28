@@ -24,6 +24,9 @@ pub enum Error {
     Invalid(&'static str),
     #[error("not found")]
     NotFound,
+    /// A catalog job is already running (in this process or another one using the same database).
+    #[error("another catalog job is running")]
+    Busy,
     #[error("{0}")]
     Other(String),
 }
@@ -57,6 +60,7 @@ impl Error {
             Error::Cancelled => ErrorKind::Cancelled,
             Error::Invalid(_) => ErrorKind::Invalid,
             Error::NotFound => ErrorKind::NotFound,
+            Error::Busy => ErrorKind::Busy,
             Error::Other(_) => ErrorKind::Other,
         }
     }
@@ -70,6 +74,44 @@ impl Error {
         }
     }
 }
+
+/// An error as the frontend receives it: `{ kind, message }`. The UI shows a Turkish text per
+/// kind, so the message is only for logs, except for `invalid` where it is the stable code.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ErrorInfo {
+    pub kind: ErrorKind,
+    pub message: String,
+}
+
+impl ErrorInfo {
+    pub fn other(message: impl Into<String>) -> Self {
+        Self {
+            kind: ErrorKind::Other,
+            message: message.into(),
+        }
+    }
+}
+
+impl From<Error> for ErrorInfo {
+    fn from(e: Error) -> Self {
+        let message = match &e {
+            Error::Invalid(code) => (*code).to_owned(),
+            other => other.to_string(),
+        };
+        Self {
+            kind: e.kind(),
+            message,
+        }
+    }
+}
+
+impl std::fmt::Display for ErrorInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}: {}", self.kind, self.message)
+    }
+}
+
+impl std::error::Error for ErrorInfo {}
 
 impl From<reqwest::Error> for Error {
     fn from(e: reqwest::Error) -> Self {
