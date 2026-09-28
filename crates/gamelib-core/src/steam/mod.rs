@@ -7,18 +7,17 @@
 pub mod assets;
 pub mod types;
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
-use reqwest::StatusCode;
 use reqwest::blocking::Client;
-use reqwest::header::RETRY_AFTER;
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
+use crate::http::{self, Counters};
 use crate::model::{GameMedia, Screenshot};
 use crate::text::clean;
-use crate::{Error, Result, sleep_cancellable};
+use crate::{Error, Result};
 use types::{ItemsEnvelope, QueryEnvelope, RawTag, StoreItem, TagListEnvelope, parse_items};
 
 pub const QUERY_URL: &str = "https://api.steampowered.com/IStoreQueryService/Query/v1/";
@@ -40,13 +39,6 @@ pub const SORT_APPID: u32 = 2;
 pub const SORT_TOP_SELLERS: u32 = 10;
 /// Release date, newest first (strictly ordered).
 pub const SORT_RELEASE_DESC: u32 = 40;
-
-const USER_AGENT: &str = concat!(
-    "GameLib/",
-    env!("CARGO_PKG_VERSION"),
-    " (desktop; +https://github.com/System141/gamelib)"
-);
-const MAX_ATTEMPTS: u32 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageRequest {
@@ -78,23 +70,15 @@ pub trait CatalogSource {
 
 pub struct SteamClient {
     http: Client,
-    requests: AtomicU32,
-    retries: AtomicU32,
+    counters: Counters,
 }
 
 impl SteamClient {
     /// Honours `HTTPS_PROXY`/system proxy settings and uses the platform certificate store.
     pub fn new() -> Result<Self> {
-        let http = Client::builder()
-            .user_agent(USER_AGENT)
-            .connect_timeout(Duration::from_secs(15))
-            .timeout(Duration::from_secs(60))
-            .gzip(true)
-            .build()?;
         Ok(Self {
-            http,
-            requests: AtomicU32::new(0),
-            retries: AtomicU32::new(0),
+            http: http::api_client(Duration::from_secs(60))?,
+            counters: Counters::default(),
         })
     }
 
@@ -104,51 +88,7 @@ impl SteamClient {
         query: &[(&str, &str)],
         cancel: &AtomicBool,
     ) -> Result<T> {
-        let body = self.get_text(url, query, cancel)?;
-        Ok(serde_json::from_str(&body)?)
-    }
-
-    /// GET with retries on network errors, timeouts, 429 and 5xx.
-    fn get_text(&self, url: &str, query: &[(&str, &str)], cancel: &AtomicBool) -> Result<String> {
-        let mut attempt = 0;
-        loop {
-            if cancel.load(Ordering::Relaxed) {
-                return Err(Error::Cancelled);
-            }
-            attempt += 1;
-            self.requests.fetch_add(1, Ordering::Relaxed);
-            let mut retry_after = None;
-            let err = match self.http.get(url).query(query).send() {
-                Ok(resp) => {
-                    let status = resp.status();
-                    if status.is_success() {
-                        match resp.text() {
-                            Ok(body) => return Ok(body),
-                            Err(e) => Error::from(e),
-                        }
-                    } else if status == StatusCode::TOO_MANY_REQUESTS {
-                        retry_after = resp
-                            .headers()
-                            .get(RETRY_AFTER)
-                            .and_then(|v| v.to_str().ok())
-                            .and_then(|v| v.trim().parse::<u64>().ok())
-                            .map(|s| Duration::from_secs(s.min(120)));
-                        Error::RateLimited
-                    } else {
-                        Error::Http {
-                            status: status.as_u16(),
-                            url: url.to_owned(),
-                        }
-                    }
-                }
-                Err(e) => Error::from(e),
-            };
-            if !err.is_transient() || attempt >= MAX_ATTEMPTS {
-                return Err(err);
-            }
-            self.retries.fetch_add(1, Ordering::Relaxed);
-            sleep_cancellable(retry_after.unwrap_or_else(|| backoff(attempt)), cancel)?;
-        }
+        http::get_json(&self.http, url, |r| r.query(query), cancel, &self.counters)
     }
 
     /// Turkish description (if any) and screenshots for one game.
@@ -193,10 +133,7 @@ impl CatalogSource for SteamClient {
     }
 
     fn stats(&self) -> (u32, u32) {
-        (
-            self.requests.load(Ordering::Relaxed),
-            self.retries.load(Ordering::Relaxed),
-        )
+        self.counters.get()
     }
 }
 
@@ -251,16 +188,6 @@ pub fn media_from_item(item: &StoreItem) -> GameMedia {
     }
 }
 
-/// 2, 4, 8, 16… seconds (capped at 30) plus up to 0.5 s of jitter.
-fn backoff(attempt: u32) -> Duration {
-    let base = 2u64.saturating_pow(attempt).min(30);
-    let jitter = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_millis() % 500)
-        .unwrap_or(0);
-    Duration::from_secs(base) + Duration::from_millis(u64::from(jitter))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,12 +205,5 @@ mod tests {
         assert_eq!(v["query"]["filters"]["type_filters"]["include_games"], true);
         assert_eq!(v["context"]["country_code"], COUNTRY);
         assert_eq!(v["data_request"]["include_assets"], true);
-    }
-
-    #[test]
-    fn backoff_grows_and_caps() {
-        assert!(backoff(1) >= Duration::from_secs(2));
-        assert!(backoff(3) >= Duration::from_secs(8));
-        assert!(backoff(10) < Duration::from_secs(31));
     }
 }

@@ -54,6 +54,10 @@ pub struct GameQuery {
     pub show_adult: bool,
     pub released_within_days: Option<u32>,
     pub has_links: bool,
+    /// Only games matched to a product in any of these stores.
+    pub stores: Vec<Store>,
+    /// Only games matched to a store product the user owns.
+    pub owned: bool,
     pub sort: SortKey,
     pub offset: u32,
     /// Clamped to 1..=200; 0 means the default page size.
@@ -88,6 +92,8 @@ pub struct GameCard {
     pub deck: u8,
     pub top_tags: Vec<u32>,
     pub link_count: u32,
+    /// Stores that sell this game (confident matches only).
+    pub stores: Vec<Store>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -156,6 +162,7 @@ pub struct CatalogStatus {
     pub last_new_releases_at: Option<i64>,
     /// An interrupted full sync can be resumed.
     pub resumable: bool,
+    pub store_counts: StoreCounts,
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +174,8 @@ pub struct CatalogStatus {
 pub enum WorkerKind {
     Full,
     NewReleases,
+    /// Matching other stores (GOG, itch.io) to Steam games.
+    Stores,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,6 +186,12 @@ pub enum SyncPhase {
     Featured,
     Catalog,
     NewReleases,
+    /// Reading GOG's catalog.
+    GogCatalog,
+    /// Matching store products to Steam games by title.
+    Matching,
+    /// Checking matches against GOG's GamesDB id cross-reference.
+    GogIds,
     Finalizing,
 }
 
@@ -263,6 +278,7 @@ pub struct SyncFinished {
     pub outcome: Outcome,
     pub report: Option<SyncReport>,
     pub new_releases: Option<NewReleasesReport>,
+    pub stores: Option<StoresReport>,
     pub error: Option<ErrorInfo>,
 }
 
@@ -272,6 +288,8 @@ pub struct SyncFinished {
 pub enum OpenTarget {
     Web,
     Client,
+    /// The Steam client's install dialog (for games the user owns there).
+    Install,
 }
 
 // ---------------------------------------------------------------------------
@@ -462,4 +480,149 @@ pub struct GameLink {
     pub last_check: Option<LinkCheckSummary>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+// ---------------------------------------------------------------------------
+// Other stores (GOG, itch.io)
+// ---------------------------------------------------------------------------
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Store {
+    #[default]
+    Gog,
+    Itch,
+}
+
+impl Store {
+    pub const ALL: [Store; 2] = [Store::Gog, Store::Itch];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Store::Gog => "gog",
+            Store::Itch => "itch",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "gog" => Some(Store::Gog),
+            "itch" => Some(Store::Itch),
+            _ => None,
+        }
+    }
+}
+
+/// How a store product was tied to a Steam game. A manual choice outranks GOG's GamesDB id
+/// cross-reference, which outranks a title match.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchMethod {
+    Gamesdb,
+    Title,
+    Manual,
+}
+
+impl MatchMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MatchMethod::Gamesdb => "gamesdb",
+            MatchMethod::Title => "title",
+            MatchMethod::Manual => "manual",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "gamesdb" => MatchMethod::Gamesdb,
+            "manual" => MatchMethod::Manual,
+            _ => MatchMethod::Title,
+        }
+    }
+}
+
+/// The user's verdict on a match. Refreshes never change it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchState {
+    Auto,
+    Confirmed,
+    Rejected,
+}
+
+impl MatchState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MatchState::Auto => "auto",
+            MatchState::Confirmed => "confirmed",
+            MatchState::Rejected => "rejected",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "confirmed" => MatchState::Confirmed,
+            "rejected" => MatchState::Rejected,
+            _ => MatchState::Auto,
+        }
+    }
+}
+
+/// A store product tied to a Steam game, as the game's detail shows it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreMatch {
+    pub store: Store,
+    pub product_id: String,
+    pub title: String,
+    pub url: Option<String>,
+    /// Portrait cover, when the store has one.
+    pub cover: Option<String>,
+    /// Landscape cover.
+    pub cover_wide: Option<String>,
+    pub price: Option<String>,
+    pub is_free: bool,
+    pub owned: bool,
+    pub win: bool,
+    pub mac: bool,
+    pub linux: bool,
+    pub method: MatchMethod,
+    pub score: f32,
+    pub state: MatchState,
+    /// Counts as a match (confirmed, or found with enough confidence); otherwise it is only a
+    /// suggestion the user can confirm.
+    pub confident: bool,
+}
+
+/// Result of a "match stores" job.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoresReport {
+    /// GOG products listed by the catalog in this run.
+    pub catalog: u32,
+    /// Products seen for the first time.
+    pub inserted: u32,
+    /// Distinct Steam games with a GOG match after the run.
+    pub matched_games: u32,
+    /// GamesDB lookups made in this run, and those still left for a later run.
+    pub checked: u32,
+    pub remaining: u32,
+    pub requests: u32,
+    pub retries: u32,
+    pub duration_ms: u64,
+    pub warnings: Vec<String>,
+}
+
+/// Sidebar counts: Steam games with a GOG / itch.io match, and owned store products.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreCounts {
+    pub gog: u32,
+    pub itch: u32,
+    pub owned: u32,
+    /// GOG products known, so the UI can tell whether stores were ever matched.
+    pub gog_products: u32,
+    pub last_store_sync_at: Option<i64>,
 }

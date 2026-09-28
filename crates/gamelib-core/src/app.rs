@@ -12,15 +12,17 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
 
-use crate::db::{Db, links, read};
+use crate::db::{Db, links, read, stores as store_db};
+use crate::http::{self, Counters, Pacer};
 use crate::links::{SiteRegistry, resolve, validate};
 use crate::model::{
     AppStatus, GameDetail, GameLink, GameMedia, GamePage, GameQuery, LinkCheck, LinkInput,
-    NewReleasesReport, OpenTarget, Outcome, SiteInfo, SyncFinished, SyncProgress, SyncReport,
-    TagInfo, WorkerKind,
+    MatchState, NewReleasesReport, OpenTarget, Outcome, SiteInfo, Store, StoreMatch, StoresReport,
+    SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
 };
 use crate::new_releases::{NewReleasesOptions, fetch_new_releases};
 use crate::steam::{CatalogSource, SteamClient};
+use crate::stores::{StoreSyncOptions, gamesdb, gog, run_store_sync};
 use crate::sync::{SyncOptions, run_sync};
 use crate::{Error, Result, unix_now};
 
@@ -37,11 +39,12 @@ pub trait EventSink: Send + Sync {
 /// Creates the catalog source a job downloads from. Called on the job's own thread.
 pub type SourceFactory = dyn Fn() -> Result<Box<dyn CatalogSource>> + Send + Sync;
 
-/// Settings for catalog jobs. The defaults download from Steam.
+/// Settings for catalog jobs. The defaults download from Steam and the real stores.
 #[derive(Clone)]
 pub struct JobOptions {
     pub sync: SyncOptions,
     pub new_releases: NewReleasesOptions,
+    pub stores: StoreSyncOptions,
     pub source: Arc<SourceFactory>,
 }
 
@@ -50,16 +53,20 @@ impl Default for JobOptions {
         Self {
             sync: SyncOptions::default(),
             new_releases: NewReleasesOptions::default(),
+            stores: StoreSyncOptions::default(),
             source: Arc::new(steam_source),
         }
     }
 }
 
+/// A Steam game is looked up in GamesDB again after this long.
+const LOOKUP_MAX_AGE: i64 = 30 * 86_400;
+
 fn steam_source() -> Result<Box<dyn CatalogSource>> {
     Ok(Box::new(SteamClient::new()?))
 }
 
-/// The single background job slot: a full sync or a new-release check.
+/// The single background job slot: a full sync, a new-release check or store matching.
 #[derive(Default)]
 struct JobSlot {
     running: AtomicBool,
@@ -72,6 +79,7 @@ struct JobSlot {
 enum JobReport {
     Full(SyncReport),
     NewReleases(NewReleasesReport),
+    Stores(StoresReport),
 }
 
 pub struct App {
@@ -141,7 +149,8 @@ impl App {
             ..self.options.sync.clone()
         };
         self.spawn_job(WorkerKind::Full, move |db, source, cancel, progress| {
-            run_sync(db, source, &opts, cancel, progress).map(JobReport::Full)
+            let source = source()?;
+            run_sync(db, source.as_ref(), &opts, cancel, progress).map(JobReport::Full)
         })
     }
 
@@ -154,9 +163,19 @@ impl App {
         self.spawn_job(
             WorkerKind::NewReleases,
             move |db, source, cancel, progress| {
-                fetch_new_releases(db, source, &opts, cancel, progress).map(JobReport::NewReleases)
+                let source = source()?;
+                fetch_new_releases(db, source.as_ref(), &opts, cancel, progress)
+                    .map(JobReport::NewReleases)
             },
         )
+    }
+
+    /// Starts matching other stores (GOG) to the Steam catalog in the background.
+    pub fn start_store_sync(&self) -> Result<()> {
+        let opts = self.options.stores.clone();
+        self.spawn_job(WorkerKind::Stores, move |db, _, cancel, progress| {
+            run_store_sync(db, &opts, cancel, progress).map(JobReport::Stores)
+        })
     }
 
     /// Asks the running job to stop; it then finishes with the `cancelled` outcome.
@@ -179,6 +198,89 @@ impl App {
     /// Turkish description and screenshots, fetched from Steam when a game is opened.
     pub fn game_media(&self, appid: u32) -> Result<GameMedia> {
         SteamClient::new()?.fetch_media(appid, &AtomicBool::new(false))
+    }
+
+    // --- other stores -----------------------------------------------------------------------
+
+    /// Store products matched to a Steam game (suggestions included, rejected ones left out).
+    pub fn store_matches(&self, appid: u32) -> Result<Vec<StoreMatch>> {
+        store_db::matches_for_game(lock(&self.reader).conn(), appid)
+    }
+
+    /// Asks GOG's GamesDB which GOG products a Steam game has (at most once a month per game),
+    /// then returns the game's matches. No database lock is held during the request.
+    pub fn refresh_store_matches(&self, appid: u32) -> Result<Vec<StoreMatch>> {
+        let now = unix_now();
+        let checked = store_db::last_lookup(lock(&self.reader).conn(), Store::Gog, appid)?;
+        if checked.is_none_or(|t| now - t > LOOKUP_MAX_AGE) {
+            let endpoints = &self.options.stores.endpoints;
+            let client = http::api_client(std::time::Duration::from_secs(20))?;
+            let counters = Counters::default();
+            let pacer = Pacer::new(std::time::Duration::ZERO);
+            let cancel = AtomicBool::new(false);
+            let releases =
+                gamesdb::for_steam(&client, endpoints, appid, &pacer, &cancel, &counters)?;
+            // Products GamesDB knows but the catalog listing did not show yet.
+            if let Some(r) = releases.as_ref().filter(|r| r.is_game()) {
+                let known =
+                    store_db::known_products(lock(&self.reader).conn(), Store::Gog, &r.gog)?;
+                if known.is_empty() {
+                    for id in r.gog.iter().take(2) {
+                        if let Some(p) =
+                            gog::product_info(&client, endpoints, id, &pacer, &cancel, &counters)?
+                        {
+                            store_db::insert_extra_product(lock(&self.writer).conn(), &p, now)?;
+                        }
+                    }
+                }
+            }
+            store_db::apply_steam_lookup(
+                lock(&self.writer).conn_mut(),
+                Store::Gog,
+                appid,
+                releases.as_ref(),
+                now,
+            )?;
+        }
+        self.store_matches(appid)
+    }
+
+    /// The store page of a product. Only https pages on the store's own domains are returned.
+    pub fn store_product_url(&self, store: Store, product_id: &str) -> Result<String> {
+        let url = store_db::product_url(lock(&self.reader).conn(), store, product_id)?
+            .ok_or(Error::NotFound)?;
+        let url = validate::parse_link_url(&url)?;
+        let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+        let own = store_domains(store)
+            .iter()
+            .any(|d| host == *d || host.ends_with(&format!(".{d}")));
+        if url.scheme() != "https" || !own {
+            return Err(Error::Invalid("url_host"));
+        }
+        Ok(url.into())
+    }
+
+    /// Confirms or rejects a match (or undoes that with `auto`).
+    pub fn set_match_state(
+        &self,
+        store: Store,
+        product_id: &str,
+        appid: u32,
+        state: MatchState,
+    ) -> Result<()> {
+        let changed = store_db::set_match_state(
+            lock(&self.writer).conn(),
+            store,
+            product_id,
+            appid,
+            state,
+            unix_now(),
+        )?;
+        if changed {
+            Ok(())
+        } else {
+            Err(Error::NotFound)
+        }
     }
 
     // --- external links ---------------------------------------------------------------------
@@ -231,7 +333,7 @@ impl App {
     where
         F: FnOnce(
                 &mut Db,
-                &dyn CatalogSource,
+                &SourceFactory,
                 &AtomicBool,
                 &mut dyn FnMut(&SyncProgress),
             ) -> Result<JobReport>
@@ -263,7 +365,6 @@ impl App {
                 let slot = thread_slot;
                 let result = catch_unwind(AssertUnwindSafe(|| {
                     let mut db = Db::open(&db_path)?;
-                    let source = source()?;
                     let mut on_progress = |p: &SyncProgress| {
                         *lock(&slot.last_progress) = Some(p.clone());
                         sink.emit(EVENT_PROGRESS, to_json(p));
@@ -298,6 +399,15 @@ pub fn steam_url(appid: u32, target: OpenTarget) -> String {
     match target {
         OpenTarget::Web => format!("https://store.steampowered.com/app/{appid}/"),
         OpenTarget::Client => format!("steam://store/{appid}"),
+        OpenTarget::Install => format!("steam://install/{appid}"),
+    }
+}
+
+/// Domains a store's product pages may live on.
+fn store_domains(store: Store) -> &'static [&'static str] {
+    match store {
+        Store::Gog => &["gog.com"],
+        Store::Itch => &["itch.io"],
     }
 }
 
@@ -307,11 +417,13 @@ fn finished_event(kind: WorkerKind, result: Result<JobReport>) -> SyncFinished {
         outcome: Outcome::Completed,
         report: None,
         new_releases: None,
+        stores: None,
         error: None,
     };
     match result {
         Ok(JobReport::Full(report)) => finished.report = Some(report),
         Ok(JobReport::NewReleases(report)) => finished.new_releases = Some(report),
+        Ok(JobReport::Stores(report)) => finished.stores = Some(report),
         Err(Error::Cancelled) => finished.outcome = Outcome::Cancelled,
         Err(e) => {
             finished.outcome = Outcome::Failed;

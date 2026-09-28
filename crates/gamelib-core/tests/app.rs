@@ -157,6 +157,7 @@ fn options(
             ..Default::default()
         },
         source: Arc::new(source),
+        ..Default::default()
     }
 }
 

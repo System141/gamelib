@@ -8,18 +8,23 @@ mod serve;
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
+use gamelib_core::app::{App, EventSink};
 use gamelib_core::db::Db;
 use gamelib_core::db::read::{get_game, list_tags, query_games, status};
+use gamelib_core::db::stores::matches_for_game;
 use gamelib_core::db::write::{get_meta, meta_keys};
 use gamelib_core::links::{SiteRegistry, resolve, validate};
 use gamelib_core::model::{
-    DeckFilter, GameDetail, GameMedia, GameQuery, Platform, SortKey, SyncProgress, TagInfo,
+    DeckFilter, GameDetail, GameMedia, GameQuery, Platform, SortKey, Store, SyncProgress, TagInfo,
+    WorkerKind,
 };
 use gamelib_core::new_releases::{NewReleasesOptions, fetch_new_releases};
 use gamelib_core::steam::SteamClient;
+use gamelib_core::stores::{StoreSyncOptions, run_store_sync};
 use gamelib_core::sync::{SyncOptions, run_sync};
 use gamelib_core::{Error, Result, unix_now};
 use serde::Serialize;
@@ -34,11 +39,17 @@ Commands:
                  [--max-pages N] [--no-prune] [--fresh] [--no-featured] [--delay-ms N]
   new-releases   Fetch games released since the last check
                  [--days N] [--max-pages N]
+  stores sync    Match GOG's catalog to the Steam games (by title, then GOG's GamesDB ids)
+                 [--no-gamesdb] [--gamesdb-limit N]
+  stores stats   How many games are matched, and how
+  stores match APPID
+                 Look a Steam game up in GamesDB and show its store matches
   stats          Catalog summary
   query          Search the local catalog
                  [--search TEXT] [--tag ID]... [--sort relevance|popular|rating|newest|oldest|name]
                  [--platform win|mac|linux]... [--deck playable|verified] [--free] [--min-score 1-9]
-                 [--within-days N] [--links] [--adult] [--limit N] [--offset N]
+                 [--within-days N] [--links] [--store gog|itch]... [--owned] [--adult]
+                 [--limit N] [--offset N]
   game APPID     Show one stored game as JSON
   media APPID    Fetch the Turkish description and screenshots of a game
   check-link URL Follow a link's redirects without downloading it
@@ -72,6 +83,7 @@ fn main() -> ExitCode {
         "serve" => cmd_serve(&db_path, args),
         "sync" => cmd_sync(&db_path, args),
         "new-releases" => cmd_new_releases(&db_path, args),
+        "stores" => cmd_stores(&db_path, args),
         "stats" => cmd_stats(&db_path),
         "query" => cmd_query(&db_path, args),
         "game" => cmd_game(&db_path, args),
@@ -139,7 +151,9 @@ fn ensure_empty(args: &[String]) -> Result<()> {
 
 fn print_progress(p: &SyncProgress) {
     let phase = format!("{:?}", p.phase).to_lowercase();
-    if p.total > 0 {
+    if p.kind == WorkerKind::Stores {
+        eprintln!("[{phase}] {}/{}", p.fetched, p.total);
+    } else if p.total > 0 {
         eprintln!(
             "[{phase}] page {}/{} — {}/{} games",
             p.page, p.pages, p.fetched, p.total
@@ -205,6 +219,101 @@ fn cmd_new_releases(db_path: &Path, mut args: Vec<String>) -> Result<()> {
         &mut print_progress,
     )?;
     print_json(&report)
+}
+
+fn cmd_stores(db_path: &Path, mut args: Vec<String>) -> Result<()> {
+    if args.is_empty() {
+        return Err(Error::Other(
+            "stores expects `sync`, `stats` or `match APPID`".into(),
+        ));
+    }
+    match args.remove(0).as_str() {
+        "sync" => {
+            let opts = StoreSyncOptions {
+                gamesdb: !take_flag(&mut args, "--no-gamesdb"),
+                gamesdb_limit: parse_num(
+                    take_value(&mut args, "--gamesdb-limit"),
+                    "--gamesdb-limit",
+                )?,
+                ..Default::default()
+            };
+            ensure_empty(&args)?;
+            let mut db = Db::open(db_path)?;
+            let report =
+                run_store_sync(&mut db, &opts, &AtomicBool::new(false), &mut print_progress)?;
+            print_json(&report)
+        }
+        "stats" => {
+            ensure_empty(&args)?;
+            let db = Db::open(db_path)?;
+            print_json(&store_stats(db.conn())?)
+        }
+        "match" => {
+            let appid = parse_num::<u32>(args.first().cloned(), "APPID")?
+                .ok_or_else(|| Error::Other("stores match expects an APPID".into()))?;
+            args.remove(0);
+            ensure_empty(&args)?;
+            let app = App::open(db_path, Arc::new(NoEvents))?;
+            let local = matches_for_game(Db::open(db_path)?.conn(), appid)?.len();
+            let matches = app.refresh_store_matches(appid)?;
+            eprintln!(
+                "{local} match(es) before the lookup, {} after",
+                matches.len()
+            );
+            print_json(&matches)
+        }
+        other => Err(Error::Other(format!("unknown stores command `{other}`"))),
+    }
+}
+
+struct NoEvents;
+
+impl EventSink for NoEvents {
+    fn emit(&self, _event: &str, _payload: serde_json::Value) {}
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StoreStats {
+    products: BTreeMap<String, u32>,
+    games_matched: BTreeMap<String, u32>,
+    matches_by_method: BTreeMap<String, u32>,
+    suggestions: u32,
+    rejected: u32,
+    gamesdb_checked: u32,
+    gamesdb_pending: u32,
+}
+
+fn store_stats(conn: &rusqlite::Connection) -> Result<StoreStats> {
+    let pairs = |sql: &str| -> Result<BTreeMap<String, u32>> {
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?)))?
+            .collect::<std::result::Result<BTreeMap<_, _>, _>>()?;
+        Ok(rows)
+    };
+    let one = |sql: &str| -> Result<u32> { Ok(conn.query_row(sql, [], |r| r.get(0))?) };
+    let confident = gamelib_core::db::stores::CONFIDENT_SQL;
+    Ok(StoreStats {
+        products: pairs(
+            "SELECT store || ':' || kind, COUNT(*) FROM store_products GROUP BY store, kind",
+        )?,
+        games_matched: pairs(&format!(
+            "SELECT m.store, COUNT(DISTINCT m.appid) FROM store_matches m WHERE {confident} GROUP BY m.store"
+        ))?,
+        matches_by_method: pairs(&format!(
+            "SELECT m.store || ':' || m.method, COUNT(*) FROM store_matches m WHERE {confident}
+             GROUP BY m.store, m.method"
+        ))?,
+        suggestions: one(
+            "SELECT COUNT(*) FROM store_matches m WHERE m.state = 'auto' AND m.score < 0.85",
+        )?,
+        rejected: one("SELECT COUNT(*) FROM store_matches WHERE state = 'rejected'")?,
+        gamesdb_checked: one(
+            "SELECT COUNT(*) FROM store_products WHERE external_checked_at IS NOT NULL",
+        )?,
+        gamesdb_pending: gamelib_core::db::stores::gamesdb_todo(conn, Store::Gog)?.len() as u32,
+    })
 }
 
 fn cmd_stats(db_path: &Path) -> Result<()> {
@@ -307,6 +416,11 @@ fn cmd_query(db_path: &Path, mut args: Vec<String>) -> Result<()> {
         show_adult: take_flag(&mut args, "--adult"),
         released_within_days: parse_num(take_value(&mut args, "--within-days"), "--within-days")?,
         has_links: take_flag(&mut args, "--links"),
+        stores: take_all(&mut args, "--store")
+            .iter()
+            .map(|s| Store::parse(s).ok_or_else(|| Error::Other(format!("unknown store `{s}`"))))
+            .collect::<Result<Vec<_>>>()?,
+        owned: take_flag(&mut args, "--owned"),
         offset: parse_num(take_value(&mut args, "--offset"), "--offset")?.unwrap_or(0),
         limit: parse_num(take_value(&mut args, "--limit"), "--limit")?.unwrap_or(15),
     };

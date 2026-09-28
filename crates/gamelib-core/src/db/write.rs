@@ -16,6 +16,8 @@ pub mod meta_keys {
     /// Newest release date known to be fully covered; new-release checks start from here.
     pub const RELEASE_WATERMARK: &str = "release_watermark";
     pub const LAST_NEW_RELEASES_AT: &str = "last_new_releases_at";
+    /// Unix time the last "match stores" job finished.
+    pub const LAST_STORE_SYNC_AT: &str = "last_store_sync_at";
 }
 
 pub fn upsert_tags(conn: &Connection, tags: &[RawTag]) -> Result<()> {

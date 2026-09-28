@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use gamelib_core::app::{App, EventSink, steam_url};
-use gamelib_core::model::{GameQuery, LinkInput, OpenTarget};
+use gamelib_core::model::{GameQuery, LinkInput, MatchState, OpenTarget, Store};
 use gamelib_core::{Error, ErrorInfo, ErrorKind, Result};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -158,6 +158,22 @@ struct SteamArgs {
     target: OpenTarget,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MatchStateArgs {
+    store: Store,
+    product_id: String,
+    appid: u32,
+    state: MatchState,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductArgs {
+    store: Store,
+    product_id: String,
+}
+
 fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value, ErrorInfo> {
     let value = match command {
         "get_status" => to_json(&app.status()?),
@@ -182,6 +198,23 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         "get_game" => to_json(&app.get_game(parse::<AppidArgs>(args)?.appid)?),
         "list_tags" => to_json(&app.list_tags()?),
         "get_game_media" => to_json(&app.game_media(parse::<AppidArgs>(args)?.appid)?),
+        "start_store_sync" => {
+            app.start_store_sync()?;
+            Value::Null
+        }
+        "get_store_matches" => to_json(&app.store_matches(parse::<AppidArgs>(args)?.appid)?),
+        "refresh_store_matches" => {
+            to_json(&app.refresh_store_matches(parse::<AppidArgs>(args)?.appid)?)
+        }
+        "set_match_state" => {
+            let a: MatchStateArgs = parse(args)?;
+            app.set_match_state(a.store, &a.product_id, a.appid, a.state)?;
+            Value::Null
+        }
+        "open_store_page" => {
+            let a: ProductArgs = parse(args)?;
+            json!({ "url": app.store_product_url(a.store, &a.product_id)? })
+        }
         "list_sites" => to_json(&app.list_sites()),
         "list_links" => to_json(&app.list_links(parse::<AppidArgs>(args)?.appid)?),
         "save_link" => to_json(&app.save_link(&parse::<LinkArgs>(args)?.input)?),

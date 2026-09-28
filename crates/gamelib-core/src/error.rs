@@ -9,7 +9,7 @@ pub enum Error {
     Network(String),
     #[error("request timed out: {0}")]
     Timeout(String),
-    #[error("rate limited by Steam")]
+    #[error("rate limited by the server")]
     RateLimited,
     #[error("HTTP {status} from {url}")]
     Http { status: u16, url: String },

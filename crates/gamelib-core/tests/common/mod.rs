@@ -1,6 +1,8 @@
 //! Shared helpers for integration tests: store item builders and a fake catalog source.
 #![allow(dead_code)]
 
+pub mod http;
+
 use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, Ordering};
 

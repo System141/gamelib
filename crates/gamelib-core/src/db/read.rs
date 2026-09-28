@@ -5,9 +5,10 @@ use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 
 use crate::Result;
 use crate::db::Db;
+use crate::db::stores::{CONFIDENT_SQL, store_counts};
 use crate::db::write::{get_meta_i64, meta_keys};
 use crate::model::{
-    CatalogStatus, DeckFilter, GameCard, GameDetail, GamePage, GameQuery, Platform, SortKey,
+    CatalogStatus, DeckFilter, GameCard, GameDetail, GamePage, GameQuery, Platform, SortKey, Store,
     TagInfo,
 };
 use crate::search::{fts_query, normalize, parse_appid};
@@ -21,10 +22,12 @@ const TOP_TAGS: usize = 3;
 const CARD_COLUMNS: &str = "g.appid, g.name, g.asset_format, g.img_capsule, g.img_capsule_2x, g.img_header,
   g.release_date, g.is_free, g.is_early_access, g.price_formatted, g.original_price_formatted, g.discount_pct,
   g.review_score, g.review_pct, g.review_count, g.win, g.mac, g.linux, g.deck_compat, g.tagids,
-  (SELECT COUNT(*) FROM game_links l WHERE l.appid = g.appid) AS link_count";
+  (SELECT COUNT(*) FROM game_links l WHERE l.appid = g.appid) AS link_count,
+  (SELECT group_concat(DISTINCT m.store) FROM store_matches m
+   WHERE m.appid = g.appid AND m.state != 'rejected' AND (m.state = 'confirmed' OR m.score >= 0.85)) AS stores";
 
 /// Number of columns in [`CARD_COLUMNS`]; detail columns follow.
-const CARD_WIDTH: usize = 21;
+const CARD_WIDTH: usize = 22;
 
 struct Filter {
     sql: String,
@@ -94,6 +97,23 @@ fn build_filter(q: &GameQuery, now: i64) -> Filter {
     }
     if q.has_links {
         conds.push("EXISTS (SELECT 1 FROM game_links l WHERE l.appid = g.appid)".into());
+    }
+    let mut stores = q.stores.clone();
+    stores.sort_unstable();
+    stores.dedup();
+    if !stores.is_empty() {
+        let marks = vec!["?"; stores.len()].join(", ");
+        conds.push(format!(
+            "g.appid IN (SELECT m.appid FROM store_matches m WHERE m.store IN ({marks}) AND {CONFIDENT_SQL})"
+        ));
+        params.extend(stores.iter().map(|s| Value::Text(s.as_str().into())));
+    }
+    if q.owned {
+        conds.push(format!(
+            "g.appid IN (SELECT m.appid FROM store_matches m JOIN store_products p
+               ON p.store = m.store AND p.product_id = m.product_id
+             WHERE p.owned = 1 AND {CONFIDENT_SQL})"
+        ));
     }
     if q.sort == SortKey::Oldest {
         // A handful of games have no release date; they would otherwise all lead the list.
@@ -209,7 +229,20 @@ fn card_from_row(row: &Row<'_>) -> rusqlite::Result<GameCard> {
         deck: row.get(18)?,
         top_tags,
         link_count: row.get(20)?,
+        stores: parse_stores(row.get::<_, Option<String>>(21)?.as_deref()),
     })
+}
+
+/// `group_concat` of store ids, in a stable order.
+fn parse_stores(list: Option<&str>) -> Vec<Store> {
+    let mut stores: Vec<Store> = list
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(Store::parse)
+        .collect();
+    stores.sort_unstable();
+    stores.dedup();
+    stores
 }
 
 pub fn get_game(conn: &Connection, appid: u32) -> Result<Option<GameDetail>> {
@@ -269,6 +302,7 @@ pub fn list_tags(conn: &Connection) -> Result<Vec<TagInfo>> {
 }
 
 pub fn status(db: &mut Db) -> Result<CatalogStatus> {
+    let store_counts = store_counts(db)?;
     let game_count = db.cached_count("status:games", |conn| {
         Ok(
             conn.query_row("SELECT COUNT(*) FROM games WHERE delisted = 0", [], |r| {
@@ -291,5 +325,6 @@ pub fn status(db: &mut Db) -> Result<CatalogStatus> {
         last_sync_at: get_meta_i64(conn, meta_keys::LAST_SYNC_AT)?,
         last_new_releases_at: get_meta_i64(conn, meta_keys::LAST_NEW_RELEASES_AT)?,
         resumable: get_meta_i64(conn, meta_keys::SYNC_CURSOR)?.is_some(),
+        store_counts,
     })
 }

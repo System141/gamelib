@@ -6,6 +6,7 @@
 pub mod links;
 pub mod read;
 pub mod schema;
+pub mod stores;
 pub mod write;
 
 use std::collections::HashMap;

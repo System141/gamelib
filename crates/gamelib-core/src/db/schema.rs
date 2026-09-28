@@ -128,7 +128,62 @@ CREATE TABLE game_links(
 CREATE INDEX idx_game_links_appid ON game_links(appid);
 "#;
 
-const MIGRATIONS: &[&str] = &[MIGRATION_1];
+/// Other stores (GOG, itch.io): their products and which Steam games they match. Like links,
+/// matches have no foreign key to games, and user decisions (`state`) survive every refresh.
+const MIGRATION_2: &str = r#"
+CREATE TABLE store_products(
+  store               TEXT NOT NULL,
+  product_id          TEXT NOT NULL,
+  kind                TEXT NOT NULL DEFAULT 'game',
+  title               TEXT NOT NULL,
+  canonical_title     TEXT NOT NULL,
+  slug                TEXT,
+  url                 TEXT,
+  developers          TEXT NOT NULL DEFAULT '[]',
+  publishers          TEXT NOT NULL DEFAULT '[]',
+  release_date        INTEGER,
+  store_release_date  INTEGER,
+  cover               TEXT,
+  cover_wide          TEXT,
+  win                 INTEGER NOT NULL DEFAULT 0,
+  mac                 INTEGER NOT NULL DEFAULT 0,
+  linux               INTEGER NOT NULL DEFAULT 0,
+  price_formatted     TEXT,
+  is_free             INTEGER NOT NULL DEFAULT 0,
+  in_catalog          INTEGER NOT NULL DEFAULT 1,
+  owned               INTEGER NOT NULL DEFAULT 0,
+  owned_key           TEXT,
+  external_checked_at INTEGER,
+  seen_at             INTEGER NOT NULL,
+  PRIMARY KEY (store, product_id)
+) WITHOUT ROWID;
+
+CREATE INDEX idx_store_products_title ON store_products(canonical_title);
+CREATE INDEX idx_store_products_owned ON store_products(store, owned) WHERE owned = 1;
+
+CREATE TABLE store_matches(
+  store      TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  appid      INTEGER NOT NULL,
+  method     TEXT NOT NULL,
+  score      REAL NOT NULL,
+  state      TEXT NOT NULL DEFAULT 'auto',
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (store, product_id, appid)
+) WITHOUT ROWID;
+
+CREATE INDEX idx_store_matches_appid ON store_matches(appid, store);
+
+-- When a Steam game was last looked up in a store's cross-reference (GamesDB for GOG).
+CREATE TABLE store_lookups(
+  store      TEXT NOT NULL,
+  appid      INTEGER NOT NULL,
+  checked_at INTEGER NOT NULL,
+  PRIMARY KEY (store, appid)
+) WITHOUT ROWID;
+"#;
+
+const MIGRATIONS: &[&str] = &[MIGRATION_1, MIGRATION_2];
 
 /// Schema version this build expects.
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();

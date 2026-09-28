@@ -6,7 +6,7 @@ use std::sync::Arc;
 use gamelib_core::app::{App, steam_url};
 use gamelib_core::model::{
     AppStatus, GameDetail, GameLink, GameMedia, GamePage, GameQuery, LinkCheck, LinkInput,
-    OpenTarget, SiteInfo, TagInfo,
+    MatchState, OpenTarget, SiteInfo, Store, StoreMatch, TagInfo,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -71,6 +71,53 @@ pub async fn list_tags(app: State<'_, Arc<App>>) -> CmdResult<Vec<TagInfo>> {
 #[tauri::command]
 pub async fn get_game_media(app: State<'_, Arc<App>>, appid: u32) -> CmdResult<GameMedia> {
     blocking(&app, move |app| app.game_media(appid)).await
+}
+
+// --- other stores ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn start_store_sync(app: State<'_, Arc<App>>) -> CmdResult<()> {
+    Ok(app.start_store_sync()?)
+}
+
+#[tauri::command]
+pub async fn get_store_matches(app: State<'_, Arc<App>>, appid: u32) -> CmdResult<Vec<StoreMatch>> {
+    blocking(&app, move |app| app.store_matches(appid)).await
+}
+
+/// Looks the game up in GOG's GamesDB (at most monthly), then returns its matches.
+#[tauri::command]
+pub async fn refresh_store_matches(
+    app: State<'_, Arc<App>>,
+    appid: u32,
+) -> CmdResult<Vec<StoreMatch>> {
+    blocking(&app, move |app| app.refresh_store_matches(appid)).await
+}
+
+#[tauri::command]
+pub async fn set_match_state(
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+    appid: u32,
+    state: MatchState,
+) -> CmdResult<()> {
+    blocking(&app, move |app| {
+        app.set_match_state(store, &product_id, appid, state)
+    })
+    .await
+}
+
+/// Opens a product's page on its store (https, store domains only).
+#[tauri::command]
+pub async fn open_store_page(
+    handle: AppHandle,
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+) -> CmdResult<()> {
+    let url = blocking(&app, move |app| app.store_product_url(store, &product_id)).await?;
+    open_url(&handle, url)
 }
 
 // --- external links -------------------------------------------------------------------------
