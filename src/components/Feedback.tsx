@@ -10,7 +10,7 @@ import type { AppStatus } from "../lib/types";
 
 const STALE_AFTER_SECONDS = 7 * 86_400;
 
-/** Thin bar under the top bar: download progress, an interrupted download, or a stale catalog. */
+/** Thin bar under the top bar: download progress, an interrupted or never-run full download, or a stale catalog. */
 export function SyncBanner({
   status,
   onResume,
@@ -52,6 +52,11 @@ export function SyncBanner({
     text = tr.sync.resumable;
     action = tr.sync.resume;
     onAction = onResume;
+  } else if (!status.lastSyncAt && status.gameCount > 0) {
+    // Only new releases were fetched so far.
+    kind = "partial";
+    text = tr.sync.notFull(status.gameCount);
+    action = tr.sync.downloadAll;
   } else if (status.lastSyncAt && nowSeconds() - status.lastSyncAt > STALE_AFTER_SECONDS) {
     kind = "stale";
     text = tr.sync.stale(status.lastSyncAt);

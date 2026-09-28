@@ -206,6 +206,14 @@ export const tr = {
     toastCancelled: "Güncelleme durduruldu",
     toastCancelledDetail: "Katalog indirmesine daha sonra kaldığı yerden devam edebilirsin.",
     toastFailed: "Güncelleme tamamlanamadı",
+    notFull: (count: number) => `Tüm katalog henüz indirilmedi; şu an ${n(count)} oyun var.`,
+    downloadAll: "Tümünü indir",
+  },
+  preview: {
+    server: "Tarayıcı önizlemesi · yerel katalog",
+    serverHint: (dbPath: string) => `gamelib-cli serve üzerinden: ${dbPath}`,
+    fixture: "Tarayıcı önizlemesi · örnek veri",
+    fixtureHint: "Yalnızca örnek oyunlar gösteriliyor. Tüm katalog için gamelib-cli serve komutunu çalıştırıp sayfayı yenile.",
   },
   newView: {
     title: "Yeni Çıkanlar",

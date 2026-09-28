@@ -1,4 +1,4 @@
-// Mirrors crates/gamelib-core/src/model.rs and src-tauri/src/commands.rs (camelCase JSON).
+// Mirrors crates/gamelib-core/src/model.rs and error.rs (camelCase JSON).
 
 export type SortKey = "relevance" | "popular" | "rating" | "newest" | "oldest" | "name";
 export type Platform = "win" | "mac" | "linux";

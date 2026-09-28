@@ -16,7 +16,7 @@ import type {
   TagInfo,
 } from "./types";
 
-/** Typed wrappers around the Rust commands in src-tauri/src/commands.rs. */
+/** Typed wrappers around the Rust commands (src-tauri/src/commands.rs; `gamelib-cli serve` in the browser preview). */
 export const api = {
   getStatus: () => invoke<AppStatus>("get_status"),
   startSync: (fresh = false) => invoke<void>("start_sync", { fresh }),
