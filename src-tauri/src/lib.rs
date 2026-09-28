@@ -1,17 +1,29 @@
 mod commands;
 mod error;
-mod state;
 
-use tauri::Manager;
+use std::sync::Arc;
+
+use gamelib_core::app::{App, EventSink};
+use tauri::{AppHandle, Emitter, Manager};
+
+/// Forwards catalog job events to the webview.
+struct TauriSink(AppHandle);
+
+impl EventSink for TauriSink {
+    fn emit(&self, event: &str, payload: serde_json::Value) {
+        let _ = self.0.emit(event, payload);
+    }
+}
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Local (non-roaming) data dir: the catalog is ~150 MB and can always be re-downloaded.
+            // `gamelib-cli` uses the same file by default (see crates/gamelib-cli/src/main.rs).
             let dir = app.path().app_local_data_dir()?;
-            std::fs::create_dir_all(&dir)?;
-            app.manage(state::AppState::open(dir.join("gamelib.db"))?);
+            let sink = Arc::new(TauriSink(app.handle().clone()));
+            app.manage(Arc::new(App::open(dir.join("gamelib.db"), sink)?));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

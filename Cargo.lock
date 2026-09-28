@@ -1258,12 +1258,10 @@ name = "gamelib"
 version = "0.1.0"
 dependencies = [
  "gamelib-core",
- "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
- "thiserror 2.0.21",
 ]
 
 [[package]]
