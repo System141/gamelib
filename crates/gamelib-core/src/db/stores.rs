@@ -9,7 +9,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::Result;
 use crate::db::Db;
 use crate::db::write::{get_meta_i64, meta_keys};
-use crate::model::{MatchMethod, MatchState, Store, StoreCounts, StoreMatch};
+use crate::model::{LibraryItem, MatchMethod, MatchState, Store, StoreCounts, StoreMatch};
+use crate::steam::assets::asset_url;
 use crate::stores::StoreProduct;
 use crate::stores::gamesdb::Releases;
 use crate::stores::matching::{self, CERTAIN, Candidate, GAMESDB, MatchKey, SteamIndex};
@@ -137,13 +138,20 @@ pub struct MatchInput {
 /// Products of `store`, with what title matching needs. Packs are included: GOG sells many
 /// games only as an edition pack ("Cyberpunk 2077", "Fallout 3: Game of the Year Edition"),
 /// and a pack only matches a Steam game with the same title.
-pub fn products_for_matching(conn: &Connection, store: Store) -> Result<Vec<MatchInput>> {
+pub fn products_for_matching(
+    conn: &Connection,
+    store: Store,
+    only: Option<&[String]>,
+) -> Result<Vec<MatchInput>> {
     let mut stmt = conn.prepare(
         "SELECT product_id, canonical_title, developers, publishers, release_date, store_release_date
-         FROM store_products WHERE store = ?1 AND kind IN ('game', 'pack')",
+         FROM store_products
+         WHERE store = ?1 AND kind IN ('game', 'pack')
+           AND (?2 IS NULL OR product_id IN (SELECT value FROM json_each(?2)))",
     )?;
+    let only = only.map(|ids| serde_json::to_string(ids).unwrap_or_else(|_| "[]".into()));
     let rows = stmt
-        .query_map(params![store.as_str()], |r| {
+        .query_map(params![store.as_str(), only], |r| {
             let developers: String = r.get(2)?;
             let publishers: String = r.get(3)?;
             let companies = parse_list(&developers)
@@ -376,11 +384,13 @@ fn existing_games(conn: &Connection, appids: &[u32]) -> Result<Vec<u32>> {
     Ok(out)
 }
 
-/// GOG products to check against GamesDB: never checked, and without a certain match.
-pub fn gamesdb_todo(conn: &Connection, store: Store) -> Result<Vec<String>> {
+/// GOG products to check against GamesDB: never checked, and without a certain match (only the
+/// owned ones with `owned_only`).
+pub fn gamesdb_todo(conn: &Connection, store: Store, owned_only: bool) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "SELECT p.product_id FROM store_products p
          WHERE p.store = ?1 AND p.kind = 'game' AND p.external_checked_at IS NULL
+           AND (?3 = 0 OR p.owned = 1)
            AND NOT EXISTS (
              SELECT 1 FROM store_matches m
              WHERE m.store = p.store AND m.product_id = p.product_id AND m.state != 'rejected'
@@ -388,7 +398,10 @@ pub fn gamesdb_todo(conn: &Connection, store: Store) -> Result<Vec<String>> {
          ORDER BY p.in_catalog DESC, p.product_id",
     )?;
     let ids = stmt
-        .query_map(params![store.as_str(), f64::from(CERTAIN)], |r| r.get(0))?
+        .query_map(
+            params![store.as_str(), f64::from(CERTAIN), owned_only],
+            |r| r.get(0),
+        )?
         .collect::<std::result::Result<Vec<String>, _>>()?;
     Ok(ids)
 }
@@ -467,6 +480,93 @@ pub fn set_manual_match(
         params![store.as_str(), product_id, appid, now],
     )?;
     Ok(())
+}
+
+/// Marks exactly `owned` (product id, download key) as the user's products in `store`.
+pub fn set_owned(
+    conn: &mut Connection,
+    store: Store,
+    owned: &[(String, Option<u64>)],
+) -> Result<()> {
+    let ids: Vec<&str> = owned.iter().map(|(id, _)| id.as_str()).collect();
+    let tx = conn.transaction()?;
+    tx.execute(
+        "UPDATE store_products SET owned = 0, owned_key = NULL
+         WHERE store = ?1 AND owned = 1 AND product_id NOT IN (SELECT value FROM json_each(?2))",
+        params![store.as_str(), serde_json::to_string(&ids)?],
+    )?;
+    {
+        let mut stmt = tx.prepare(
+            "UPDATE store_products SET owned = 1, owned_key = ?3 WHERE store = ?1 AND product_id = ?2",
+        )?;
+        for (id, key) in owned {
+            stmt.execute(params![store.as_str(), id, key.map(|k| k.to_string())])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Forgets ownership in `store` (after signing out).
+pub fn clear_owned(conn: &Connection, store: Store) -> Result<()> {
+    conn.execute(
+        "UPDATE store_products SET owned = 0, owned_key = NULL WHERE store = ?1 AND owned = 1",
+        params![store.as_str()],
+    )?;
+    Ok(())
+}
+
+/// Owned products tied to a Steam game.
+pub fn owned_matched(conn: &Connection) -> Result<u32> {
+    Ok(conn.query_row(
+        &format!(
+            "SELECT COUNT(DISTINCT p.store || ':' || p.product_id) FROM store_products p
+             JOIN store_matches m ON m.store = p.store AND m.product_id = p.product_id
+             WHERE p.owned = 1 AND {CONFIDENT_SQL}"
+        ),
+        [],
+        |r| r.get(0),
+    )?)
+}
+
+/// The user's games (no DLC or packs, which have no files of their own), with the Steam game
+/// each one is, if known.
+pub fn library(conn: &Connection, store: Option<Store>) -> Result<Vec<LibraryItem>> {
+    let mut stmt = conn.prepare_cached(&format!(
+        "WITH lib AS (
+           SELECT p.*, (SELECT m.appid FROM store_matches m
+                        WHERE m.store = p.store AND m.product_id = p.product_id AND {CONFIDENT_SQL}
+                        ORDER BY m.score DESC, m.appid LIMIT 1) AS appid
+           FROM store_products p
+           WHERE p.owned = 1 AND p.kind = 'game' AND (?1 IS NULL OR p.store = ?1))
+         SELECT lib.store, lib.product_id, lib.title, lib.url, lib.cover, lib.cover_wide,
+                lib.win, lib.mac, lib.linux, lib.appid, g.asset_format, g.img_header, g.img_capsule
+         FROM lib LEFT JOIN games g ON g.appid = lib.appid
+         ORDER BY lib.title COLLATE NOCASE, lib.store"
+    ))?;
+    let items = stmt
+        .query_map(params![store.map(Store::as_str)], |r| {
+            let store: String = r.get(0)?;
+            let format: Option<String> = r.get(10)?;
+            let header: Option<String> = r.get(11)?;
+            let capsule: Option<String> = r.get(12)?;
+            Ok(LibraryItem {
+                store: Store::parse(&store).unwrap_or_default(),
+                product_id: r.get(1)?,
+                title: r.get(2)?,
+                url: r.get(3)?,
+                cover: r.get(4)?,
+                cover_wide: r.get(5)?,
+                win: r.get(6)?,
+                mac: r.get(7)?,
+                linux: r.get(8)?,
+                appid: r.get(9)?,
+                steam_header: asset_url(format.as_deref(), header.as_deref()),
+                steam_capsule: asset_url(format.as_deref(), capsule.as_deref()),
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(items)
 }
 
 /// Distinct Steam games with a confident match in `store`.

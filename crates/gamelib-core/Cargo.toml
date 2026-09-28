@@ -7,8 +7,12 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+dirs.workspace = true
 reqwest.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }

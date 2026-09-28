@@ -211,9 +211,13 @@ fn gog_matches(db: &Db, appid: u32) -> Vec<StoreMatch> {
 
 fn sync(db: &mut Db, base: &str) -> gamelib_core::model::StoresReport {
     let mut phases = Vec::new();
-    let report = run_store_sync(db, &options(base), &AtomicBool::new(false), &mut |p| {
-        phases.push(p.phase)
-    })
+    let report = run_store_sync(
+        db,
+        &options(base),
+        None,
+        &AtomicBool::new(false),
+        &mut |p| phases.push(p.phase),
+    )
     .unwrap();
     assert!(!phases.is_empty());
     report
@@ -357,11 +361,13 @@ fn gamesdb_can_be_skipped_and_limited() {
     let mut db = db();
     let mut opts = options(&server.base);
     opts.gamesdb_limit = Some(10);
-    let report = run_store_sync(&mut db, &opts, &AtomicBool::new(false), &mut |_| {}).unwrap();
+    let report =
+        run_store_sync(&mut db, &opts, None, &AtomicBool::new(false), &mut |_| {}).unwrap();
     assert_eq!((report.checked, report.remaining), (10, 92));
 
     opts.gamesdb = false;
-    let report = run_store_sync(&mut db, &opts, &AtomicBool::new(false), &mut |_| {}).unwrap();
+    let report =
+        run_store_sync(&mut db, &opts, None, &AtomicBool::new(false), &mut |_| {}).unwrap();
     assert_eq!(report.checked, 0);
     assert_eq!(server.count("/platforms/gog/"), 10);
 }
@@ -397,7 +403,7 @@ fn cancelling_keeps_the_catalog() {
     let server = fake_stores(Arc::new(Mutex::new(gog_catalog())));
     let mut db = db();
     let cancel = AtomicBool::new(false);
-    let result = run_store_sync(&mut db, &options(&server.base), &cancel, &mut |p| {
+    let result = run_store_sync(&mut db, &options(&server.base), None, &cancel, &mut |p| {
         if p.phase == gamelib_core::model::SyncPhase::GogIds && p.fetched >= 20 {
             cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }

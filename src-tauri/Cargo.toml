@@ -17,5 +17,6 @@ tauri-build = { version = "2.7", features = [] }
 [dependencies]
 tauri = { version = "2.12", features = [] }
 tauri-plugin-opener = "2.6"
+tauri-plugin-dialog = "2.8"
 gamelib-core.workspace = true
 serde_json.workspace = true

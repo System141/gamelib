@@ -176,6 +176,8 @@ pub enum WorkerKind {
     NewReleases,
     /// Matching other stores (GOG, itch.io) to Steam games.
     Stores,
+    /// Reading the signed-in accounts' libraries.
+    Library,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -192,6 +194,8 @@ pub enum SyncPhase {
     Matching,
     /// Checking matches against GOG's GamesDB id cross-reference.
     GogIds,
+    /// Reading the signed-in accounts' libraries.
+    Library,
     Finalizing,
 }
 
@@ -279,6 +283,7 @@ pub struct SyncFinished {
     pub report: Option<SyncReport>,
     pub new_releases: Option<NewReleasesReport>,
     pub stores: Option<StoresReport>,
+    pub library: Option<LibraryReport>,
     pub error: Option<ErrorInfo>,
 }
 
@@ -613,6 +618,8 @@ pub struct StoresReport {
     pub retries: u32,
     pub duration_ms: u64,
     pub warnings: Vec<String>,
+    /// The signed-in accounts' libraries, read at the end of the job.
+    pub library: Option<LibraryReport>,
 }
 
 /// Sidebar counts: Steam games with a GOG / itch.io match, and owned store products.
@@ -625,4 +632,89 @@ pub struct StoreCounts {
     /// GOG products known, so the UI can tell whether stores were ever matched.
     pub gog_products: u32,
     pub last_store_sync_at: Option<i64>,
+}
+
+/// Signed-in store accounts, as the UI sees them (never any token).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Accounts {
+    pub gog: Option<Account>,
+    pub itch: Option<Account>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Account {
+    pub username: String,
+}
+
+/// Result of reading the signed-in accounts' libraries.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryReport {
+    /// Products owned on GOG / itch.io; `None` when not signed in there.
+    pub gog_owned: Option<u32>,
+    pub itch_owned: Option<u32>,
+    /// Owned products tied to a Steam game.
+    pub matched: u32,
+    /// The GOG session had expired and the user was signed out.
+    pub gog_signed_out: bool,
+    pub warnings: Vec<String>,
+}
+
+/// A product the user owns, for the library view.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryItem {
+    pub store: Store,
+    pub product_id: String,
+    pub title: String,
+    pub url: Option<String>,
+    pub cover: Option<String>,
+    pub cover_wide: Option<String>,
+    pub win: bool,
+    pub mac: bool,
+    pub linux: bool,
+    /// The Steam game it is (best confident match), for its artwork and details.
+    pub appid: Option<u32>,
+    pub steam_header: Option<String>,
+    pub steam_capsule: Option<String>,
+}
+
+/// A store search result offered for tying to a Steam game by hand.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreSearchHit {
+    pub store: Store,
+    pub product_id: String,
+    pub title: String,
+    pub url: Option<String>,
+    pub cover_wide: Option<String>,
+    pub developer: Option<String>,
+    pub price: Option<String>,
+    pub is_free: bool,
+    pub win: bool,
+    pub mac: bool,
+    pub linux: bool,
+    /// Title/company/year agreement with the Steam game (0 when the titles differ).
+    pub score: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    /// Where games are installed (and downloads kept until then).
+    pub library_dir: String,
+    /// Keep installers after a successful install.
+    pub keep_installers: bool,
+    /// Look for app updates on start and every few hours.
+    pub auto_update: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SettingsPatch {
+    pub library_dir: Option<String>,
+    pub keep_installers: Option<bool>,
+    pub auto_update: Option<bool>,
 }

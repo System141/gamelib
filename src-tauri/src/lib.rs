@@ -1,5 +1,6 @@
 mod commands;
 mod error;
+mod login;
 
 use std::sync::Arc;
 
@@ -18,6 +19,7 @@ impl EventSink for TauriSink {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Local (non-roaming) data dir: the catalog is ~150 MB and can always be re-downloaded.
             // `gamelib-cli` uses the same file by default (see crates/gamelib-cli/src/main.rs).
@@ -40,6 +42,20 @@ pub fn run() {
             commands::refresh_store_matches,
             commands::set_match_state,
             commands::open_store_page,
+            commands::search_store,
+            commands::link_store_product,
+            commands::get_accounts,
+            commands::gog_login_url,
+            commands::gog_login,
+            commands::gog_login_with_code,
+            commands::itch_set_key,
+            commands::sign_out,
+            commands::start_library_sync,
+            commands::get_library,
+            commands::open_account_page,
+            commands::get_settings,
+            commands::update_settings,
+            commands::pick_library_dir,
             commands::list_sites,
             commands::list_links,
             commands::save_link,

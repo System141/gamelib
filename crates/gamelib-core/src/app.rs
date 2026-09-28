@@ -12,17 +12,21 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
 
+use crate::db::write::{get_meta, set_meta};
 use crate::db::{Db, links, read, stores as store_db};
 use crate::http::{self, Counters, Pacer};
 use crate::links::{SiteRegistry, resolve, validate};
 use crate::model::{
-    AppStatus, GameDetail, GameLink, GameMedia, GamePage, GameQuery, LinkCheck, LinkInput,
-    MatchState, NewReleasesReport, OpenTarget, Outcome, SiteInfo, Store, StoreMatch, StoresReport,
+    Account, Accounts, AppStatus, GameDetail, GameLink, GameMedia, GamePage, GameQuery,
+    LibraryItem, LibraryReport, LinkCheck, LinkInput, MatchState, NewReleasesReport, OpenTarget,
+    Outcome, Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, StoresReport,
     SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
 };
 use crate::new_releases::{NewReleasesOptions, fetch_new_releases};
+use crate::secrets::{ItchKey, SecretStore};
 use crate::steam::{CatalogSource, SteamClient};
-use crate::stores::{StoreSyncOptions, gamesdb, gog, run_store_sync};
+use crate::stores::matching::{self, MatchKey};
+use crate::stores::{StoreSyncOptions, gamesdb, gog, gog_account, itch, library, run_store_sync};
 use crate::sync::{SyncOptions, run_sync};
 use crate::{Error, Result, unix_now};
 
@@ -62,6 +66,12 @@ impl Default for JobOptions {
 /// A Steam game is looked up in GamesDB again after this long.
 const LOOKUP_MAX_AGE: i64 = 30 * 86_400;
 
+mod settings_keys {
+    pub const LIBRARY_DIR: &str = "settings.library_dir";
+    pub const KEEP_INSTALLERS: &str = "settings.keep_installers";
+    pub const AUTO_UPDATE: &str = "settings.auto_update";
+}
+
 fn steam_source() -> Result<Box<dyn CatalogSource>> {
     Ok(Box::new(SteamClient::new()?))
 }
@@ -80,6 +90,7 @@ enum JobReport {
     Full(SyncReport),
     NewReleases(NewReleasesReport),
     Stores(StoresReport),
+    Library(LibraryReport),
 }
 
 pub struct App {
@@ -89,6 +100,8 @@ pub struct App {
     /// Connection for user data (links). Catalog jobs open their own.
     writer: Mutex<Db>,
     sites: SiteRegistry,
+    /// Store account credentials, next to the database.
+    secrets: Arc<SecretStore>,
     job: Arc<JobSlot>,
     sink: Arc<dyn EventSink>,
     options: JobOptions,
@@ -109,11 +122,17 @@ impl App {
         // The writer runs migrations, so open it before the read-only connection.
         let writer = Db::open(&db_path)?;
         let reader = Db::open_reader(&db_path)?;
+        let dir = db_path
+            .parent()
+            .filter(|d| !d.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let secrets = Arc::new(SecretStore::new(dir));
         Ok(Self {
             db_path,
             reader: Mutex::new(reader),
             writer: Mutex::new(writer),
             sites: SiteRegistry::with_builtin_sites(),
+            secrets,
             job: Arc::default(),
             sink,
             options,
@@ -170,11 +189,22 @@ impl App {
         )
     }
 
-    /// Starts matching other stores (GOG) to the Steam catalog in the background.
+    /// Starts matching other stores (GOG) to the Steam catalog in the background, then reads
+    /// the signed-in accounts' libraries.
     pub fn start_store_sync(&self) -> Result<()> {
         let opts = self.options.stores.clone();
+        let secrets = self.secrets.clone();
         self.spawn_job(WorkerKind::Stores, move |db, _, cancel, progress| {
-            run_store_sync(db, &opts, cancel, progress).map(JobReport::Stores)
+            run_store_sync(db, &opts, Some(&secrets), cancel, progress).map(JobReport::Stores)
+        })
+    }
+
+    /// Starts reading the signed-in accounts' libraries in the background.
+    pub fn start_library_sync(&self) -> Result<()> {
+        let opts = self.options.stores.clone();
+        let secrets = self.secrets.clone();
+        self.spawn_job(WorkerKind::Library, move |db, _, cancel, progress| {
+            library::run_library_sync(db, &secrets, &opts, cancel, progress).map(JobReport::Library)
         })
     }
 
@@ -260,6 +290,77 @@ impl App {
         Ok(url.into())
     }
 
+    /// Searches a store for a Steam game (itch.io only; GOG is matched from its catalog), best
+    /// first. Results are remembered so one can be tied to the game.
+    pub fn search_store(&self, store: Store, appid: u32) -> Result<Vec<StoreSearchHit>> {
+        if store != Store::Itch {
+            return Err(Error::Invalid("store"));
+        }
+        let key = self
+            .secrets
+            .load()?
+            .itch
+            .ok_or(Error::Invalid("itch_signed_out"))?;
+        let game = self.get_game(appid)?.ok_or(Error::NotFound)?;
+        let client = itch::client()?;
+        let found = itch::search(
+            &client,
+            &self.options.stores.endpoints,
+            &key.api_key,
+            &game.card.name,
+            &AtomicBool::new(false),
+            &Counters::default(),
+        )?;
+        let steam_key = MatchKey::new(
+            game.developers
+                .iter()
+                .chain(&game.publishers)
+                .map(String::as_str),
+            [game.card.release_date, game.original_release_date],
+        );
+        let steam_title = matching::canonical_title(&game.card.name);
+        let now = unix_now();
+        let mut hits = Vec::new();
+        {
+            let writer = lock(&self.writer);
+            for p in found {
+                store_db::insert_extra_product(writer.conn(), &p, now)?;
+                let key = MatchKey::new(p.developers.iter().map(String::as_str), [p.release_date]);
+                let score = if matching::canonical_title(&p.title) == steam_title {
+                    matching::score(&key, &steam_key)
+                } else {
+                    0.0
+                };
+                hits.push(StoreSearchHit {
+                    store: p.store,
+                    product_id: p.product_id,
+                    title: p.title,
+                    url: p.url,
+                    cover_wide: p.cover_wide,
+                    developer: p.developers.into_iter().next(),
+                    price: p.price,
+                    is_free: p.is_free,
+                    win: p.win,
+                    mac: p.mac,
+                    linux: p.linux,
+                    score,
+                });
+            }
+        }
+        hits.sort_by(|a, b| b.score.total_cmp(&a.score));
+        Ok(hits)
+    }
+
+    /// Ties a store product to a Steam game by hand.
+    pub fn link_store_product(&self, store: Store, product_id: &str, appid: u32) -> Result<()> {
+        let writer = lock(&self.writer);
+        let known = store_db::known_products(writer.conn(), store, &[product_id.to_owned()])?;
+        if known.is_empty() || read::get_game(writer.conn(), appid)?.is_none() {
+            return Err(Error::NotFound);
+        }
+        store_db::set_manual_match(writer.conn(), store, product_id, appid, unix_now())
+    }
+
     /// Confirms or rejects a match (or undoes that with `auto`).
     pub fn set_match_state(
         &self,
@@ -281,6 +382,118 @@ impl App {
         } else {
             Err(Error::NotFound)
         }
+    }
+
+    // --- accounts and library ---------------------------------------------------------------
+
+    /// Who is signed in where. Tokens never leave the core.
+    pub fn accounts(&self) -> Result<Accounts> {
+        let s = self.secrets.load()?;
+        Ok(Accounts {
+            gog: s.gog.map(|t| Account {
+                username: t.username.unwrap_or(t.user_id),
+            }),
+            itch: s.itch.map(|k| Account {
+                username: k.username,
+            }),
+        })
+    }
+
+    /// GOG's sign-in page; it ends on a redirect that [`App::gog_login_with_code`] accepts.
+    pub fn gog_login_url(&self) -> String {
+        gog_account::login_url(&self.options.stores.endpoints)
+    }
+
+    /// Finishes a GOG sign-in with the redirect address (or the bare code), then reads the
+    /// library in the background.
+    pub fn gog_login_with_code(&self, redirect: &str) -> Result<Accounts> {
+        let code = gog_account::code_from_redirect(redirect).ok_or(Error::Invalid("gog_code"))?;
+        let client = gog_account::client()?;
+        let cancel = AtomicBool::new(false);
+        let counters = Counters::default();
+        let endpoints = &self.options.stores.endpoints;
+        let mut tokens = gog_account::exchange_code(&client, endpoints, &code, &cancel, &counters)?;
+        tokens.username =
+            gog_account::username(&client, endpoints, &tokens.access_token, &cancel, &counters)
+                .ok()
+                .flatten();
+        self.secrets.update(|s| s.gog = Some(tokens))?;
+        self.after_sign_in();
+        self.accounts()
+    }
+
+    /// Saves an itch.io API key after checking it, then reads the library in the background.
+    pub fn itch_set_key(&self, key: &str) -> Result<Accounts> {
+        let key = key.trim();
+        let user = itch::profile(
+            &itch::client()?,
+            &self.options.stores.endpoints,
+            key,
+            &AtomicBool::new(false),
+            &Counters::default(),
+        )?;
+        self.secrets.update(|s| {
+            s.itch = Some(ItchKey {
+                api_key: key.to_owned(),
+                user_id: user.id,
+                username: user.username,
+            })
+        })?;
+        self.after_sign_in();
+        self.accounts()
+    }
+
+    /// Signs out of a store and forgets what it owned.
+    pub fn sign_out(&self, store: Store) -> Result<Accounts> {
+        library::sign_out(&lock(&self.writer), &self.secrets, store)?;
+        self.accounts()
+    }
+
+    fn after_sign_in(&self) {
+        // Another job may be running; the next store sync reads the library then.
+        let _ = self.start_library_sync();
+    }
+
+    /// The user's games on the signed-in stores.
+    pub fn library(&self, store: Option<Store>) -> Result<Vec<LibraryItem>> {
+        store_db::library(lock(&self.reader).conn(), store)
+    }
+
+    // --- settings -----------------------------------------------------------------------------
+
+    pub fn settings(&self) -> Result<Settings> {
+        let reader = lock(&self.reader);
+        let conn = reader.conn();
+        let flag = |key: &str, default: bool| -> Result<bool> {
+            Ok(get_meta(conn, key)?.map_or(default, |v| v == "1"))
+        };
+        Ok(Settings {
+            library_dir: get_meta(conn, settings_keys::LIBRARY_DIR)?
+                .unwrap_or_else(default_library_dir),
+            keep_installers: flag(settings_keys::KEEP_INSTALLERS, false)?,
+            auto_update: flag(settings_keys::AUTO_UPDATE, true)?,
+        })
+    }
+
+    pub fn update_settings(&self, patch: &SettingsPatch) -> Result<Settings> {
+        {
+            let writer = lock(&self.writer);
+            let conn = writer.conn();
+            if let Some(dir) = &patch.library_dir {
+                let dir = dir.trim();
+                if dir.is_empty() || !Path::new(dir).is_absolute() {
+                    return Err(Error::Invalid("library_dir"));
+                }
+                set_meta(conn, settings_keys::LIBRARY_DIR, dir)?;
+            }
+            if let Some(v) = patch.keep_installers {
+                set_meta(conn, settings_keys::KEEP_INSTALLERS, u8::from(v))?;
+            }
+            if let Some(v) = patch.auto_update {
+                set_meta(conn, settings_keys::AUTO_UPDATE, u8::from(v))?;
+            }
+        }
+        self.settings()
     }
 
     // --- external links ---------------------------------------------------------------------
@@ -403,6 +616,23 @@ pub fn steam_url(appid: u32, target: OpenTarget) -> String {
     }
 }
 
+/// `~/Games` (e.g. `C:\\Users\\<user>\\Games`).
+fn default_library_dir() -> String {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Games")
+        .display()
+        .to_string()
+}
+
+/// Where a store's account settings are (itch.io: API keys).
+pub fn account_page(store: Store) -> &'static str {
+    match store {
+        Store::Gog => "https://www.gog.com/account",
+        Store::Itch => "https://itch.io/user/settings/api-keys",
+    }
+}
+
 /// Domains a store's product pages may live on.
 fn store_domains(store: Store) -> &'static [&'static str] {
     match store {
@@ -418,12 +648,14 @@ fn finished_event(kind: WorkerKind, result: Result<JobReport>) -> SyncFinished {
         report: None,
         new_releases: None,
         stores: None,
+        library: None,
         error: None,
     };
     match result {
         Ok(JobReport::Full(report)) => finished.report = Some(report),
         Ok(JobReport::NewReleases(report)) => finished.new_releases = Some(report),
         Ok(JobReport::Stores(report)) => finished.stores = Some(report),
+        Ok(JobReport::Library(report)) => finished.library = Some(report),
         Err(Error::Cancelled) => finished.outcome = Outcome::Cancelled,
         Err(e) => {
             finished.outcome = Outcome::Failed;

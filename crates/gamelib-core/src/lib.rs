@@ -19,6 +19,7 @@ pub mod new_releases;
 pub mod rating;
 pub mod record;
 pub mod search;
+pub mod secrets;
 pub mod steam;
 pub mod stores;
 pub mod sync;

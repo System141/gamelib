@@ -7,6 +7,9 @@
 
 pub mod gamesdb;
 pub mod gog;
+pub mod gog_account;
+pub mod itch;
+pub mod library;
 pub mod matching;
 
 use std::sync::atomic::AtomicBool;
@@ -16,6 +19,7 @@ use crate::db::write::{meta_keys, set_meta};
 use crate::db::{Db, stores as store_db};
 use crate::http::{self, Counters, Pacer};
 use crate::model::{Store, StoresReport, SyncPhase, SyncProgress, WorkerKind};
+use crate::secrets::SecretStore;
 use crate::{Error, Result, unix_now};
 
 /// Base URLs of the store services, replaceable in tests.
@@ -107,11 +111,47 @@ pub struct StoreProduct {
     pub is_free: bool,
 }
 
+/// Progress reporting for store jobs.
+pub(crate) struct Progress<'a> {
+    kind: WorkerKind,
+    started_at: i64,
+    sink: &'a mut dyn FnMut(&SyncProgress),
+}
+
+impl<'a> Progress<'a> {
+    pub(crate) fn new(kind: WorkerKind, sink: &'a mut dyn FnMut(&SyncProgress)) -> Self {
+        Self {
+            kind,
+            started_at: unix_now(),
+            sink,
+        }
+    }
+
+    pub(crate) fn emit(&mut self, phase: SyncPhase, fetched: u32, total: u32) {
+        self.emit_pages(phase, fetched, total, 0, 0);
+    }
+
+    fn emit_pages(&mut self, phase: SyncPhase, fetched: u32, total: u32, page: u32, pages: u32) {
+        (self.sink)(&SyncProgress {
+            kind: self.kind,
+            phase,
+            fetched,
+            total,
+            page,
+            pages,
+            started_at: self.started_at,
+            resumed: false,
+        });
+    }
+}
+
 /// Reads GOG's catalog, matches it to the Steam catalog by title, then checks what is still
-/// uncertain against GamesDB. Stores everything as it goes, so a cancelled run keeps its work.
+/// uncertain against GamesDB, and finally reads the signed-in accounts' libraries. Stores
+/// everything as it goes, so a cancelled run keeps its work.
 pub fn run_store_sync(
     db: &mut Db,
     opts: &StoreSyncOptions,
+    secrets: Option<&SecretStore>,
     cancel: &AtomicBool,
     on_progress: &mut dyn FnMut(&SyncProgress),
 ) -> Result<StoresReport> {
@@ -120,22 +160,11 @@ pub fn run_store_sync(
     let http = http::api_client(Duration::from_secs(60))?;
     let counters = Counters::default();
     let mut report = StoresReport::default();
-    let mut emit = |phase: SyncPhase, fetched: u32, total: u32, page: u32, pages: u32| {
-        on_progress(&SyncProgress {
-            kind: WorkerKind::Stores,
-            phase,
-            fetched,
-            total,
-            page,
-            pages,
-            started_at,
-            resumed: false,
-        });
-    };
+    let mut progress = Progress::new(WorkerKind::Stores, on_progress);
 
     // 1. GOG catalog. Products are stamped with this run, strictly later than the previous
     // run even within the same second, so the ones not listed any more can be told apart.
-    emit(SyncPhase::GogCatalog, 0, 0, 0, 0);
+    progress.emit(SyncPhase::GogCatalog, 0, 0);
     let run = started_at.max(store_db::last_seen(db.conn(), Store::Gog)? + 1);
     let pacer = Pacer::new(opts.catalog_delay);
     let mut after: Option<String> = None;
@@ -153,7 +182,7 @@ pub fn run_store_sync(
         report.inserted += store_db::upsert_products(db.conn_mut(), &page.products, run)?;
         report.catalog += page.products.len() as u32;
         let pages = page.total.div_ceil(gog::PAGE_SIZE).max(page_no);
-        emit(
+        progress.emit_pages(
             SyncPhase::GogCatalog,
             report.catalog,
             page.total.max(report.catalog),
@@ -170,9 +199,60 @@ pub fn run_store_sync(
     }
 
     // 2. Title matching against the Steam catalog.
-    let products = store_db::products_for_matching(db.conn(), Store::Gog)?;
+    match_by_title(db, Store::Gog, None, cancel, &mut progress)?;
+
+    // 3. GamesDB for products without a certain match.
+    if opts.gamesdb {
+        let (checked, remaining) = check_gamesdb(
+            db,
+            &http,
+            opts,
+            false,
+            cancel,
+            &counters,
+            &mut progress,
+            &mut report.warnings,
+        )?;
+        report.checked = checked;
+        report.remaining = remaining;
+    }
+
+    // 4. The signed-in accounts' libraries.
+    if let Some(secrets) = secrets
+        && library::signed_in(secrets)?
+    {
+        report.library = Some(library::sync_library(
+            db,
+            secrets,
+            opts,
+            cancel,
+            &counters,
+            &mut progress,
+        )?);
+    }
+
+    progress.emit(SyncPhase::Finalizing, 0, 0);
+    set_meta(db.conn(), meta_keys::LAST_STORE_SYNC_AT, unix_now())?;
+    report.matched_games = store_db::matched_games(db.conn(), Store::Gog)?;
+    (report.requests, report.retries) = counters.get();
+    report.duration_ms = clock.elapsed().as_millis() as u64;
+    Ok(report)
+}
+
+/// Title-matches a store's products (all of them, or `only` these) to the Steam catalog.
+pub(crate) fn match_by_title(
+    db: &mut Db,
+    store: Store,
+    only: Option<&[String]>,
+    cancel: &AtomicBool,
+    progress: &mut Progress,
+) -> Result<()> {
+    let products = store_db::products_for_matching(db.conn(), store, only)?;
     let total = products.len() as u32;
-    emit(SyncPhase::Matching, 0, total, 0, 0);
+    progress.emit(SyncPhase::Matching, 0, total);
+    if products.is_empty() {
+        return Ok(());
+    }
     let index = store_db::steam_index(db.conn())?;
     let now = unix_now();
     for (i, chunk) in products.chunks(500).enumerate() {
@@ -180,45 +260,49 @@ pub fn run_store_sync(
         let tx = db.conn_mut().transaction()?;
         for p in chunk {
             let candidates = index.candidates(&p.canonical_title, &p.key);
-            store_db::replace_title_matches(&tx, Store::Gog, &p.product_id, &candidates, now)?;
+            store_db::replace_title_matches(&tx, store, &p.product_id, &candidates, now)?;
         }
         tx.commit()?;
         let done = ((i + 1) * 500).min(products.len()) as u32;
-        emit(SyncPhase::Matching, done, total, 0, 0);
+        progress.emit(SyncPhase::Matching, done, total);
     }
-    drop(index);
+    Ok(())
+}
 
-    // 3. GamesDB for products without a certain match.
-    if opts.gamesdb {
-        let todo = store_db::gamesdb_todo(db.conn(), Store::Gog)?;
-        let limit = opts.gamesdb_limit.map_or(todo.len(), |n| n as usize);
-        let total = todo.len().min(limit) as u32;
-        let pacer = Pacer::new(opts.gamesdb_delay);
-        emit(SyncPhase::GogIds, 0, total, 0, 0);
-        for id in todo.iter().take(limit) {
-            let releases =
-                match gamesdb::for_gog(&http, &opts.endpoints, id, &pacer, cancel, &counters) {
-                    Ok(r) => r,
-                    Err(Error::Cancelled) => return Err(Error::Cancelled),
-                    Err(e) => {
-                        // GamesDB is optional; keep the title matches and try again next run.
-                        report.warnings.push(format!("GamesDB lookup stopped: {e}"));
-                        break;
-                    }
-                };
-            store_db::apply_gamesdb(db.conn_mut(), Store::Gog, id, releases.as_ref(), unix_now())?;
-            report.checked += 1;
-            if report.checked % 10 == 0 || report.checked == total {
-                emit(SyncPhase::GogIds, report.checked, total, 0, 0);
+/// Checks GOG products without a certain match against GamesDB (only owned ones with
+/// `owned_only`). GamesDB is optional: when it fails, the title matches stay and the rest is
+/// tried on the next run. Returns (checked, remaining).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_gamesdb(
+    db: &mut Db,
+    http: &reqwest::blocking::Client,
+    opts: &StoreSyncOptions,
+    owned_only: bool,
+    cancel: &AtomicBool,
+    counters: &Counters,
+    progress: &mut Progress,
+    warnings: &mut Vec<String>,
+) -> Result<(u32, u32)> {
+    let todo = store_db::gamesdb_todo(db.conn(), Store::Gog, owned_only)?;
+    let limit = opts.gamesdb_limit.map_or(todo.len(), |n| n as usize);
+    let total = todo.len().min(limit) as u32;
+    let pacer = Pacer::new(opts.gamesdb_delay);
+    progress.emit(SyncPhase::GogIds, 0, total);
+    let mut checked = 0;
+    for id in todo.iter().take(limit) {
+        let releases = match gamesdb::for_gog(http, &opts.endpoints, id, &pacer, cancel, counters) {
+            Ok(r) => r,
+            Err(Error::Cancelled) => return Err(Error::Cancelled),
+            Err(e) => {
+                warnings.push(format!("GamesDB lookup stopped: {e}"));
+                break;
             }
+        };
+        store_db::apply_gamesdb(db.conn_mut(), Store::Gog, id, releases.as_ref(), unix_now())?;
+        checked += 1;
+        if checked % 10 == 0 || checked == total {
+            progress.emit(SyncPhase::GogIds, checked, total);
         }
-        report.remaining = todo.len() as u32 - report.checked;
     }
-
-    emit(SyncPhase::Finalizing, 0, 0, 0, 0);
-    set_meta(db.conn(), meta_keys::LAST_STORE_SYNC_AT, unix_now())?;
-    report.matched_games = store_db::matched_games(db.conn(), Store::Gog)?;
-    (report.requests, report.retries) = counters.get();
-    report.duration_ms = clock.elapsed().as_millis() as u64;
-    Ok(report)
+    Ok((checked, todo.len() as u32 - checked))
 }

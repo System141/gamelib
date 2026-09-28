@@ -14,8 +14,9 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use gamelib_core::app::account_page;
 use gamelib_core::app::{App, EventSink, steam_url};
-use gamelib_core::model::{GameQuery, LinkInput, MatchState, OpenTarget, Store};
+use gamelib_core::model::{GameQuery, LinkInput, MatchState, OpenTarget, SettingsPatch, Store};
 use gamelib_core::{Error, ErrorInfo, ErrorKind, Result};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -174,6 +175,53 @@ struct ProductArgs {
     product_id: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LinkProductArgs {
+    store: Store,
+    product_id: String,
+    appid: u32,
+}
+
+#[derive(Deserialize)]
+struct StoreAppidArgs {
+    store: Store,
+    appid: u32,
+}
+
+#[derive(Deserialize)]
+struct StoreArgs {
+    store: Store,
+}
+
+#[derive(Deserialize)]
+struct OptionalStoreArgs {
+    store: Option<Store>,
+}
+
+#[derive(Deserialize)]
+struct RedirectArgs {
+    redirect: String,
+}
+
+#[derive(Deserialize)]
+struct KeyArgs {
+    key: String,
+}
+
+#[derive(Deserialize)]
+struct PatchArgs {
+    patch: SettingsPatch,
+}
+
+/// Commands that need the desktop app's windows or dialogs.
+fn desktop_only() -> ErrorInfo {
+    ErrorInfo {
+        kind: ErrorKind::Invalid,
+        message: "desktop_only".into(),
+    }
+}
+
 fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value, ErrorInfo> {
     let value = match command {
         "get_status" => to_json(&app.status()?),
@@ -215,6 +263,32 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
             let a: ProductArgs = parse(args)?;
             json!({ "url": app.store_product_url(a.store, &a.product_id)? })
         }
+        "search_store" => {
+            let a: StoreAppidArgs = parse(args)?;
+            to_json(&app.search_store(a.store, a.appid)?)
+        }
+        "link_store_product" => {
+            let a: LinkProductArgs = parse(args)?;
+            app.link_store_product(a.store, &a.product_id, a.appid)?;
+            Value::Null
+        }
+        "get_accounts" => to_json(&app.accounts()?),
+        "gog_login_url" => json!(app.gog_login_url()),
+        // The sign-in window is the desktop app's; the preview pastes the redirect instead.
+        "gog_login" | "pick_library_dir" => return Err(desktop_only()),
+        "gog_login_with_code" => {
+            to_json(&app.gog_login_with_code(&parse::<RedirectArgs>(args)?.redirect)?)
+        }
+        "itch_set_key" => to_json(&app.itch_set_key(&parse::<KeyArgs>(args)?.key)?),
+        "sign_out" => to_json(&app.sign_out(parse::<StoreArgs>(args)?.store)?),
+        "start_library_sync" => {
+            app.start_library_sync()?;
+            Value::Null
+        }
+        "get_library" => to_json(&app.library(parse::<OptionalStoreArgs>(args)?.store)?),
+        "open_account_page" => json!({ "url": account_page(parse::<StoreArgs>(args)?.store) }),
+        "get_settings" => to_json(&app.settings()?),
+        "update_settings" => to_json(&app.update_settings(&parse::<PatchArgs>(args)?.patch)?),
         "list_sites" => to_json(&app.list_sites()),
         "list_links" => to_json(&app.list_links(parse::<AppidArgs>(args)?.appid)?),
         "save_link" => to_json(&app.save_link(&parse::<LinkArgs>(args)?.input)?),

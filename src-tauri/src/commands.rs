@@ -5,10 +5,12 @@ use std::sync::Arc;
 
 use gamelib_core::app::{App, steam_url};
 use gamelib_core::model::{
-    AppStatus, GameDetail, GameLink, GameMedia, GamePage, GameQuery, LinkCheck, LinkInput,
-    MatchState, OpenTarget, SiteInfo, Store, StoreMatch, TagInfo,
+    Accounts, AppStatus, GameDetail, GameLink, GameMedia, GamePage, GameQuery, LibraryItem,
+    LinkCheck, LinkInput, MatchState, OpenTarget, Settings, SettingsPatch, SiteInfo, Store,
+    StoreMatch, StoreSearchHit, TagInfo,
 };
 use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{CmdError, CmdResult};
@@ -118,6 +120,135 @@ pub async fn open_store_page(
 ) -> CmdResult<()> {
     let url = blocking(&app, move |app| app.store_product_url(store, &product_id)).await?;
     open_url(&handle, url)
+}
+
+/// Searches a store (itch.io) for the game; results can then be tied to it.
+#[tauri::command]
+pub async fn search_store(
+    app: State<'_, Arc<App>>,
+    store: Store,
+    appid: u32,
+) -> CmdResult<Vec<StoreSearchHit>> {
+    blocking(&app, move |app| app.search_store(store, appid)).await
+}
+
+#[tauri::command]
+pub async fn link_store_product(
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+    appid: u32,
+) -> CmdResult<()> {
+    blocking(&app, move |app| {
+        app.link_store_product(store, &product_id, appid)
+    })
+    .await
+}
+
+// --- accounts and library -------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_accounts(app: State<'_, Arc<App>>) -> CmdResult<Accounts> {
+    blocking(&app, App::accounts).await
+}
+
+#[tauri::command]
+pub fn gog_login_url(app: State<'_, Arc<App>>) -> String {
+    app.gog_login_url()
+}
+
+/// Signs in to GOG in a separate window showing GOG's own login page.
+#[tauri::command]
+pub async fn gog_login(handle: AppHandle, app: State<'_, Arc<App>>) -> CmdResult<Accounts> {
+    let url = app.gog_login_url();
+    let Some(redirect) = crate::login::gog_redirect(&handle, &url).await? else {
+        return Err(gamelib_core::Error::Cancelled.into());
+    };
+    blocking(&app, move |app| app.gog_login_with_code(&redirect)).await
+}
+
+/// Finishes a GOG sign-in with the address the login page ended on (or its code).
+#[tauri::command]
+pub async fn gog_login_with_code(
+    app: State<'_, Arc<App>>,
+    redirect: String,
+) -> CmdResult<Accounts> {
+    blocking(&app, move |app| app.gog_login_with_code(&redirect)).await
+}
+
+#[tauri::command]
+pub async fn itch_set_key(app: State<'_, Arc<App>>, key: String) -> CmdResult<Accounts> {
+    blocking(&app, move |app| app.itch_set_key(&key)).await
+}
+
+#[tauri::command]
+pub async fn sign_out(app: State<'_, Arc<App>>, store: Store) -> CmdResult<Accounts> {
+    blocking(&app, move |app| app.sign_out(store)).await
+}
+
+#[tauri::command]
+pub fn start_library_sync(app: State<'_, Arc<App>>) -> CmdResult<()> {
+    Ok(app.start_library_sync()?)
+}
+
+#[tauri::command]
+pub async fn get_library(
+    app: State<'_, Arc<App>>,
+    store: Option<Store>,
+) -> CmdResult<Vec<LibraryItem>> {
+    blocking(&app, move |app| app.library(store)).await
+}
+
+/// Opens a store page where account settings live (itch.io API keys).
+#[tauri::command]
+pub fn open_account_page(handle: AppHandle, store: Store) -> CmdResult<()> {
+    open_url(&handle, gamelib_core::app::account_page(store).to_owned())
+}
+
+// --- settings -------------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_settings(app: State<'_, Arc<App>>) -> CmdResult<Settings> {
+    blocking(&app, App::settings).await
+}
+
+#[tauri::command]
+pub async fn update_settings(
+    app: State<'_, Arc<App>>,
+    patch: SettingsPatch,
+) -> CmdResult<Settings> {
+    blocking(&app, move |app| app.update_settings(&patch)).await
+}
+
+/// Lets the user choose the library folder; `None` if the dialog was cancelled.
+#[tauri::command]
+pub async fn pick_library_dir(
+    handle: AppHandle,
+    app: State<'_, Arc<App>>,
+) -> CmdResult<Option<Settings>> {
+    let current = blocking(&app, App::settings).await?.library_dir;
+    let (tx, rx) = std::sync::mpsc::channel();
+    handle
+        .dialog()
+        .file()
+        .set_title("Kütüphane klasörü")
+        .set_directory(&current)
+        .pick_folder(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let picked = tauri::async_runtime::spawn_blocking(move || rx.recv().ok().flatten())
+        .await
+        .map_err(|e| CmdError::other(e.to_string()))?;
+    let Some(dir) = picked.and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let patch = SettingsPatch {
+        library_dir: Some(dir.display().to_string()),
+        ..Default::default()
+    };
+    blocking(&app, move |app| app.update_settings(&patch))
+        .await
+        .map(Some)
 }
 
 // --- external links -------------------------------------------------------------------------

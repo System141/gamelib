@@ -23,6 +23,7 @@ use gamelib_core::model::{
     SyncProgress, TagInfo, WorkerKind,
 };
 use gamelib_core::new_releases::{NewReleasesOptions, fetch_new_releases};
+use gamelib_core::secrets::SecretStore;
 use gamelib_core::steam::SteamClient;
 use gamelib_core::stores::{StoreSyncOptions, run_store_sync};
 use gamelib_core::sync::{SyncOptions, run_sync};
@@ -239,8 +240,15 @@ fn cmd_stores(db_path: &Path, mut args: Vec<String>) -> Result<()> {
             };
             ensure_empty(&args)?;
             let mut db = Db::open(db_path)?;
-            let report =
-                run_store_sync(&mut db, &opts, &AtomicBool::new(false), &mut print_progress)?;
+            // The desktop app's accounts, so their libraries are read too.
+            let secrets = SecretStore::new(db_path.parent().unwrap_or(Path::new(".")));
+            let report = run_store_sync(
+                &mut db,
+                &opts,
+                Some(&secrets),
+                &AtomicBool::new(false),
+                &mut print_progress,
+            )?;
             print_json(&report)
         }
         "stats" => {
@@ -312,7 +320,8 @@ fn store_stats(conn: &rusqlite::Connection) -> Result<StoreStats> {
         gamesdb_checked: one(
             "SELECT COUNT(*) FROM store_products WHERE external_checked_at IS NOT NULL",
         )?,
-        gamesdb_pending: gamelib_core::db::stores::gamesdb_todo(conn, Store::Gog)?.len() as u32,
+        gamesdb_pending: gamelib_core::db::stores::gamesdb_todo(conn, Store::Gog, false)?.len()
+            as u32,
     })
 }
 
