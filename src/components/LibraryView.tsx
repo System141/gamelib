@@ -12,6 +12,7 @@ import { useAccounts, useLibrary } from "../hooks/useData";
 import { usePersistentState } from "../hooks/useUtils";
 import { StoreMark, StorePill } from "./badges";
 import { AppleIcon, LinuxIcon, WindowsIcon } from "./icons";
+import { DownloadButton, DownloadLine, IconButton, useProductDownload } from "./DownloadPicker";
 import { SmallButton } from "./ui";
 
 interface Props {
@@ -110,6 +111,7 @@ export function LibraryView({ search, status, onOpenGame, onRefresh, onOpenSetti
 
 function LibraryCard({ item, onOpenGame }: { item: LibraryItem; onOpenGame: (appid: number) => void }) {
   const image = item.steamHeader ?? item.coverWide ?? item.cover;
+  const { download, live } = useProductDownload(item.store, item.productId);
   const openStore = () =>
     api.openStorePage(item.store, item.productId).catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
 
@@ -150,11 +152,17 @@ function LibraryCard({ item, onOpenGame }: { item: LibraryItem; onOpenGame: (app
           </span>
           {item.appid == null && <span className="truncate">{tr.library.notOnSteam}</span>}
         </div>
-        <div className="mt-3 flex flex-wrap justify-end gap-1.5">
-          {item.appid != null && <SmallButton onClick={() => onOpenGame(item.appid!)}>{tr.library.details}</SmallButton>}
-          <SmallButton tone="primary" onClick={openStore} icon={<ExternalLink size={13} />}>
-            {tr.stores.openIn[item.store]}
-          </SmallButton>
+        {download && (
+          <div className="mt-2.5">
+            <DownloadLine download={download} live={live} />
+          </div>
+        )}
+        <div className="mt-auto flex items-center gap-1.5 pt-3">
+          {!download && <DownloadButton store={item.store} productId={item.productId} title={item.title} />}
+          <span className="ml-auto flex items-center gap-1.5">
+            {item.appid != null && <SmallButton onClick={() => onOpenGame(item.appid!)}>{tr.library.details}</SmallButton>}
+            <IconButton label={tr.stores.openIn[item.store]} icon={<ExternalLink size={13} />} onClick={openStore} />
+          </span>
         </div>
       </div>
     </div>

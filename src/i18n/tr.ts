@@ -1,7 +1,7 @@
 // All user-facing text. Game data (names, English descriptions) comes from Steam as-is.
 
 import { formatNumber, formatRelative } from "../lib/format";
-import type { CheckStatus, CmdError, DeckCompat, MatchMethod, SortKey, Store, SyncPhase } from "../lib/types";
+import type { CheckStatus, CmdError, DeckCompat, DownloadState, MatchMethod, SortKey, Store, SyncPhase } from "../lib/types";
 
 const n = formatNumber;
 
@@ -17,6 +17,7 @@ export const tr = {
     gog: "GOG'da olanlar",
     itch: "itch.io'da olanlar",
     library: "Sahip olduklarım",
+    downloads: "İndirmeler",
     settings: "Ayarlar",
   },
   nav: {
@@ -38,6 +39,66 @@ export const tr = {
     refresh: "Kütüphaneyi yenile",
     details: "Detaylar",
     notOnSteam: "Steam kataloğunda eşleşmedi",
+  },
+  downloads: {
+    title: "İndirmeler",
+    subtitle: (running: number, waiting: number, done: number) =>
+      [
+        running > 0 ? `${n(running)} indiriliyor` : null,
+        waiting > 0 ? `${n(waiting)} bekliyor` : null,
+        done > 0 ? `${n(done)} tamamlandı` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    location: (dir: string) => `Konum: ${dir}`,
+    download: "İndir",
+    pickerTitle: "Hangi dosya indirilsin?",
+    pickerHint: (dir: string) =>
+      `Dosyalar ${dir} içindeki .gamelib klasörüne indirilir. Kütüphane klasörünü Ayarlar'dan değiştirebilirsin.`,
+    loadingFiles: "Mağazadan dosya listesi alınıyor…",
+    noFiles: "Bu oyun için indirilebilir dosya bulunamadı.",
+    recommended: "Önerilen",
+    demo: "Demo",
+    otherPlatform: "Bu bilgisayar için değil",
+    files: (count: number) => `${n(count)} dosya`,
+    unknownSize: "Boyut bilinmiyor",
+    start: "İndirmeyi başlat",
+    startSize: (size: string) => `İndir · ${size}`,
+    cancel: "Vazgeç",
+    toastQueued: (title: string) => `${title} indirme sırasına eklendi`,
+    states: {
+      queued: "Sırada",
+      downloading: "İndiriliyor",
+      paused: "Duraklatıldı",
+      completed: "İndirildi",
+      failed: "İndirilemedi",
+    } satisfies Record<DownloadState, string>,
+    verifying: "Dosya doğrulanıyor…",
+    progress: (done: string, total: string) => `${done} / ${total}`,
+    speed: (speed: string) => `${speed}/sn`,
+    eta: (text: string) => `${text} kaldı`,
+    pause: "Duraklat",
+    resume: "Sürdür",
+    retry: "Yeniden dene",
+    cancelDownload: "İptal et",
+    confirmCancel: "İndirilen dosyalar silinsin mi?",
+    confirmDelete: "Dosyalar silinsin mi?",
+    yesDelete: "Evet, sil",
+    no: "Vazgeç",
+    deleteFiles: "Dosyaları sil",
+    openFolder: "Klasörü aç",
+    clearFinished: "Bitenleri listeden kaldır",
+    clearFinishedHint: "İndirilen dosyalar silinmez.",
+    active: "Şu an indirilen",
+    queue: "Sıradakiler",
+    finished: "Tamamlananlar",
+    finishedAt: (rel: string) => `${rel} bitti`,
+    emptyTitle: "Henüz indirme yok",
+    emptyText: "GOG ya da itch.io'da sahip olduğun oyunları Kütüphanem'den veya bir oyunun detayından indirebilirsin.",
+    goLibrary: "Kütüphaneme git",
+    noResults: "Aramana uyan indirme yok.",
+    toastDone: (title: string) => `${title} indirildi`,
+    toastFailed: (title: string) => `${title} indirilemedi`,
   },
   accounts: {
     title: "Hesaplar",
@@ -177,7 +238,7 @@ export const tr = {
   },
   links: {
     title: "Steam dışı bağlantılar",
-    hint: "Başka mağazalardaki sayfaları ya da indirme bağlantılarını buraya ekleyebilirsin. Bağlantılar varsayılan tarayıcında açılır; GameLib dosya indirmez.",
+    hint: "Başka sitelerdeki sayfaları ya da indirme bağlantılarını buraya ekleyebilirsin. Bu bağlantılar varsayılan tarayıcında açılır; uygulamanın içinden indirme yalnızca GOG ve itch.io için yapılır.",
     empty: "Bu oyun için henüz bağlantı eklenmedi.",
     add: "Bağlantı ekle",
     open: "Aç",
@@ -417,6 +478,11 @@ const INVALID_CODES: Record<string, string> = {
   itch_signed_out: "Önce itch.io API anahtarını ekle.",
   library_dir: "Kütüphane klasörü tam bir yol olmalı (örn. D:\\Oyunlar).",
   desktop_only: "Bu işlem masaüstü uygulamasında çalışır.",
+  disk_space: "Diskte yeterli boş alan yok. Yer aç ya da Ayarlar'dan kütüphane klasörünü başka bir diske taşı.",
+  not_owned: "Mağaza bu oyunu indirmene izin vermedi; hesabında görünmüyor olabilir.",
+  no_files: "Bu oyun için indirilebilir dosya bulunamadı.",
+  checksum: "İndirilen dosya bozuk çıktı (sağlama toplamı tutmadı). Yeniden dene.",
+  link_expired: "Mağazanın indirme adresi yenilenemedi. Biraz sonra yeniden dene.",
   store: "Bu mağazada arama yapılamıyor.",
 };
 

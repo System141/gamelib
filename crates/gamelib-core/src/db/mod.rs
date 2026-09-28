@@ -3,6 +3,7 @@
 //! One file holds the Steam catalog (refreshable) and the user's own data (external links).
 //! WAL mode lets the UI read while a sync writes from another connection.
 
+pub mod downloads;
 pub mod links;
 pub mod read;
 pub mod schema;

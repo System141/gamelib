@@ -32,7 +32,7 @@ pub enum Error {
 }
 
 /// Stable, serializable error category shared with the frontend.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorKind {
     Network,
@@ -77,7 +77,7 @@ impl Error {
 
 /// An error as the frontend receives it: `{ kind, message }`. The UI shows a Turkish text per
 /// kind, so the message is only for logs, except for `invalid` where it is the stable code.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct ErrorInfo {
     pub kind: ErrorKind,
     pub message: String,

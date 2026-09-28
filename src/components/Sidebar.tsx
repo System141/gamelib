@@ -1,11 +1,12 @@
 // Left navigation: catalog views and stores. Collapses to icons on narrower windows.
 
 import clsx from "clsx";
-import { LayoutGrid, Library, Link2, Settings, Sparkles } from "lucide-react";
+import { Download, LayoutGrid, Library, Link2, Settings, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { tr } from "../i18n/tr";
 import { formatNumber } from "../lib/format";
 import type { AppStatus } from "../lib/types";
+import { useDownloads } from "../hooks/useData";
 import type { View } from "../hooks/useFilters";
 import { StoreMark } from "./badges";
 import { Logo } from "./icons";
@@ -25,6 +26,13 @@ interface Item {
 
 export function Sidebar({ view, onChange, status }: Props) {
   const counts = status?.storeCounts;
+  const downloads = useDownloads().data;
+  const unfinished = downloads?.items.filter((d) => d.state !== "completed").length ?? 0;
+  const running = downloads?.items.find((d) => d.state === "downloading");
+  const live = running && downloads?.live?.id === running.id ? downloads.live : null;
+  const pct = running
+    ? Math.min(100, ((live?.doneBytes ?? running.doneBytes) / Math.max(1, live?.totalBytes ?? running.totalBytes)) * 100)
+    : null;
   const sections: { title: string; items: Item[] }[] = [
     {
       title: tr.nav.discover,
@@ -43,7 +51,10 @@ export function Sidebar({ view, onChange, status }: Props) {
     },
     {
       title: tr.nav.library,
-      items: [{ id: "library", label: tr.views.library, icon: <Library size={17} />, count: counts?.owned || undefined }],
+      items: [
+        { id: "library", label: tr.views.library, icon: <Library size={17} />, count: counts?.owned || undefined },
+        { id: "downloads", label: tr.views.downloads, icon: <DownloadsGlyph pct={pct} />, count: unfinished || undefined },
+      ],
     },
   ];
   const settings: Item = { id: "settings", label: tr.views.settings, icon: <Settings size={17} /> };
@@ -101,5 +112,32 @@ function NavItem({ item, active, onClick }: { item: Item; active: boolean; onCli
         </span>
       )}
     </button>
+  );
+}
+
+/** The downloads icon, ringed by the running download's progress. */
+function DownloadsGlyph({ pct }: { pct: number | null }) {
+  if (pct == null) return <Download size={17} />;
+  const r = 9;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className="relative grid size-5 place-items-center" role="img" aria-label={`%${Math.round(pct)}`}>
+      <svg viewBox="0 0 22 22" className="absolute inset-0 size-5 -rotate-90" aria-hidden>
+        <circle cx="11" cy="11" r={r} fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2" />
+        <circle
+          cx="11"
+          cy="11"
+          r={r}
+          fill="none"
+          stroke="var(--color-accent)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - pct / 100)}
+          className="transition-[stroke-dashoffset] duration-500"
+        />
+      </svg>
+      <Download size={10} className="text-accent" />
+    </span>
   );
 }

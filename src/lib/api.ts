@@ -4,6 +4,11 @@ import type {
   Accounts,
   AppStatus,
   CmdError,
+  Download,
+  DownloadList,
+  DownloadProgress,
+  DownloadRemoved,
+  FileOption,
   GameDetail,
   GameLink,
   GameMedia,
@@ -57,6 +62,17 @@ export const api = {
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   /** Desktop only: a folder picker; null when cancelled. */
   pickLibraryDir: () => invoke<Settings | null>("pick_library_dir"),
+  getStoreFiles: (store: Store, productId: string) => invoke<FileOption[]>("get_store_files", { store, productId }),
+  /** Desktop only: the preview server never downloads. */
+  enqueueDownload: (store: Store, productId: string, optionId: string) =>
+    invoke<Download>("enqueue_download", { store, productId, optionId }),
+  getDownloads: () => invoke<DownloadList>("get_downloads"),
+  pauseDownload: (id: number) => invoke<void>("pause_download", { id }),
+  resumeDownload: (id: number) => invoke<void>("resume_download", { id }),
+  /** Cancels a download and deletes its files. */
+  removeDownload: (id: number) => invoke<void>("remove_download", { id }),
+  clearFinishedDownloads: () => invoke<void>("clear_finished_downloads"),
+  openDownloadFolder: (id: number) => invoke<void>("open_download_folder", { id }),
   listSites: () => invoke<SiteInfo[]>("list_sites"),
   listLinks: (appid: number) => invoke<GameLink[]>("list_links", { appid }),
   saveLink: (input: LinkInput) => invoke<GameLink>("save_link", { input }),
@@ -75,6 +91,17 @@ export function onSyncProgress(cb: (p: SyncProgress) => void): Promise<UnlistenF
 
 export function onSyncFinished(cb: (f: SyncFinished) => void): Promise<UnlistenFn> {
   return listen<SyncFinished>(EVENT_FINISHED, (e) => cb(e.payload));
+}
+
+export const EVENT_DOWNLOAD_PROGRESS = "download:progress";
+export const EVENT_DOWNLOAD_STATE = "download:state";
+
+export function onDownloadProgress(cb: (p: DownloadProgress) => void): Promise<UnlistenFn> {
+  return listen<DownloadProgress>(EVENT_DOWNLOAD_PROGRESS, (e) => cb(e.payload));
+}
+
+export function onDownloadState(cb: (d: Download | DownloadRemoved) => void): Promise<UnlistenFn> {
+  return listen<Download | DownloadRemoved>(EVENT_DOWNLOAD_STATE, (e) => cb(e.payload));
 }
 
 /** Normalizes anything thrown by `invoke` into a `CmdError`. */

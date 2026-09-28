@@ -12,15 +12,17 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::Serialize;
 
+use crate::db::downloads::{self as download_db, NewDownload};
 use crate::db::write::{get_meta, set_meta};
 use crate::db::{Db, links, read, stores as store_db};
+use crate::downloads::{DownloadManager, sources};
 use crate::http::{self, Counters, Pacer};
 use crate::links::{SiteRegistry, resolve, validate};
 use crate::model::{
-    Account, Accounts, AppStatus, GameDetail, GameLink, GameMedia, GamePage, GameQuery,
-    LibraryItem, LibraryReport, LinkCheck, LinkInput, MatchState, NewReleasesReport, OpenTarget,
-    Outcome, Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, StoresReport,
-    SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
+    Account, Accounts, AppStatus, Download, DownloadList, FileOption, GameDetail, GameLink,
+    GameMedia, GamePage, GameQuery, LibraryItem, LibraryReport, LinkCheck, LinkInput, MatchState,
+    NewReleasesReport, OpenTarget, Outcome, Settings, SettingsPatch, SiteInfo, Store, StoreMatch,
+    StoreSearchHit, StoresReport, SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
 };
 use crate::new_releases::{NewReleasesOptions, fetch_new_releases};
 use crate::secrets::{ItchKey, SecretStore};
@@ -103,6 +105,8 @@ pub struct App {
     /// Store account credentials, next to the database.
     secrets: Arc<SecretStore>,
     job: Arc<JobSlot>,
+    /// The download queue; its worker runs only once [`App::start_downloads`] is called.
+    downloads: DownloadManager,
     sink: Arc<dyn EventSink>,
     options: JobOptions,
 }
@@ -127,6 +131,12 @@ impl App {
             .filter(|d| !d.as_os_str().is_empty())
             .unwrap_or(Path::new("."));
         let secrets = Arc::new(SecretStore::new(dir));
+        let downloads = DownloadManager::new(
+            db_path.clone(),
+            sink.clone(),
+            secrets.clone(),
+            options.stores.clone(),
+        );
         Ok(Self {
             db_path,
             reader: Mutex::new(reader),
@@ -134,6 +144,7 @@ impl App {
             sites: SiteRegistry::with_builtin_sites(),
             secrets,
             job: Arc::default(),
+            downloads,
             sink,
             options,
         })
@@ -494,6 +505,104 @@ impl App {
             }
         }
         self.settings()
+    }
+
+    // --- downloads ----------------------------------------------------------------------------
+
+    /// Starts the download worker, which continues downloads interrupted by the last exit. Only
+    /// the desktop app downloads; the preview server never calls this.
+    pub fn start_downloads(&self) -> Result<()> {
+        self.downloads.start(lock(&self.writer).conn())
+    }
+
+    /// What can be downloaded for a store product, the best variant for this computer first.
+    pub fn store_files(&self, store: Store, product_id: &str) -> Result<Vec<FileOption>> {
+        let owned_key = download_db::owned_key(lock(&self.reader).conn(), store, product_id)?;
+        let offers = sources::offers(
+            store,
+            product_id,
+            owned_key.as_deref(),
+            &self.secrets,
+            &self.options.stores,
+        )?;
+        Ok(offers.into_iter().map(|o| o.option).collect())
+    }
+
+    /// Queues a variant of a store product (see [`App::store_files`]) for download into the
+    /// library folder.
+    pub fn enqueue_download(
+        &self,
+        store: Store,
+        product_id: &str,
+        option_id: &str,
+    ) -> Result<Download> {
+        let (title, appid, owned_key) = {
+            let reader = lock(&self.reader);
+            let (title, appid) = store_db::product_summary(reader.conn(), store, product_id)?
+                .ok_or(Error::NotFound)?;
+            let owned_key = download_db::owned_key(reader.conn(), store, product_id)?;
+            (title, appid, owned_key)
+        };
+        let offers = sources::offers(
+            store,
+            product_id,
+            owned_key.as_deref(),
+            &self.secrets,
+            &self.options.stores,
+        )?;
+        let offer = offers
+            .into_iter()
+            .find(|o| o.option.id == option_id && !o.files.is_empty())
+            .ok_or(Error::Invalid("no_files"))?;
+        let library_dir = PathBuf::from(self.settings()?.library_dir);
+        let new = NewDownload {
+            store,
+            product_id,
+            appid,
+            title: &title,
+            option_id,
+            option_label: Some(&offer.option.label),
+            platform: offer.option.platform,
+            files: &offer.files,
+        };
+        let mut writer = lock(&self.writer);
+        self.downloads
+            .enqueue(writer.conn_mut(), &new, &library_dir)
+    }
+
+    pub fn downloads(&self) -> Result<DownloadList> {
+        Ok(DownloadList {
+            items: self.downloads.list(lock(&self.reader).conn())?,
+            live: self.downloads.live(),
+        })
+    }
+
+    pub fn pause_download(&self, id: i64) -> Result<()> {
+        self.downloads.pause(lock(&self.writer).conn(), id)
+    }
+
+    pub fn resume_download(&self, id: i64) -> Result<()> {
+        self.downloads.resume(lock(&self.writer).conn(), id)
+    }
+
+    /// Cancels a download and deletes its files.
+    pub fn remove_download(&self, id: i64) -> Result<()> {
+        self.downloads.remove(lock(&self.writer).conn(), id)
+    }
+
+    pub fn clear_finished_downloads(&self) -> Result<()> {
+        self.downloads.clear_completed(lock(&self.writer).conn())
+    }
+
+    /// The folder a download's files are in, if it exists.
+    pub fn download_folder(&self, id: i64) -> Result<PathBuf> {
+        let d = download_db::get(lock(&self.reader).conn(), id)?.ok_or(Error::NotFound)?;
+        let dir = PathBuf::from(d.dir);
+        if dir.is_dir() {
+            Ok(dir)
+        } else {
+            Err(Error::NotFound)
+        }
     }
 
     // --- external links ---------------------------------------------------------------------

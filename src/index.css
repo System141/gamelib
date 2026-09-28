@@ -41,7 +41,9 @@
 
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
   --animate-fade-in: fade-in 180ms ease-out both;
-  --animate-rise: rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  /* Not "both": a transform held after the animation would make the dialog the containing block
+     of its fixed toasts, pinning them inside small dialogs. */
+  --animate-rise: rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
   --animate-slide-in: slide-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-progress: progress 1.2s ease-in-out infinite;
 

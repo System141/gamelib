@@ -97,7 +97,8 @@ const TOAST_ICON: Record<ToastTone, ReactNode> = {
 /** The open modal dialog, if any: everything outside it is inert and drawn below it, so toasts
  *  shown while it is open have to live inside it. */
 function useModalHost(): HTMLElement {
-  const find = () => document.querySelector<HTMLElement>("dialog[open]") ?? document.body;
+  // The last open dialog in document order is the innermost (a picker inside the game details).
+  const find = () => [...document.querySelectorAll<HTMLElement>("dialog[open]")].pop() ?? document.body;
   const [host, setHost] = useState<HTMLElement>(find);
   useEffect(() => {
     const observer = new MutationObserver(() => setHost(find()));

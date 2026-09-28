@@ -5,13 +5,13 @@ import type { DeckFilter, GameQuery, Platform, SortKey } from "../lib/types";
 import { useDebounced, usePersistentState } from "./useUtils";
 
 /** Every page of the app. The grid views list Steam games; the others have their own layout. */
-export type View = "all" | "new" | "links" | "gog" | "itch" | "library" | "settings";
-export type GridView = Exclude<View, "library" | "settings">;
+export type View = "all" | "new" | "links" | "gog" | "itch" | "library" | "downloads" | "settings";
+export type GridView = Exclude<View, "library" | "downloads" | "settings">;
 
-export const VIEWS: readonly View[] = ["all", "new", "links", "gog", "itch", "library", "settings"];
+export const VIEWS: readonly View[] = ["all", "new", "links", "gog", "itch", "library", "downloads", "settings"];
 
 export function isGridView(view: View): view is GridView {
-  return view !== "library" && view !== "settings";
+  return view !== "library" && view !== "downloads" && view !== "settings";
 }
 export type NewDays = 7 | 30 | 90;
 

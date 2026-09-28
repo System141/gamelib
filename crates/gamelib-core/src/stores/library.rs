@@ -1,6 +1,7 @@
 //! Reading the signed-in accounts' libraries (owned GOG and itch.io products) and tying the
 //! products to Steam games.
 
+use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
@@ -89,6 +90,10 @@ pub fn sign_out(db: &Db, secrets: &SecretStore, store: Store) -> Result<()> {
     store_db::clear_owned(db.conn(), store)
 }
 
+/// Refreshing rotates GOG's refresh token, so two threads (a library sync and a download) must
+/// not refresh at once: the second would present a token GOG has already replaced, and fail.
+static REFRESH: Mutex<()> = Mutex::new(());
+
 /// A usable GOG session: refreshed (and saved) when the access token is about to expire.
 pub fn gog_tokens(
     secrets: &SecretStore,
@@ -97,6 +102,7 @@ pub fn gog_tokens(
     cancel: &AtomicBool,
     counters: &Counters,
 ) -> Result<GogTokens> {
+    let _refreshing = REFRESH.lock().unwrap_or_else(|p| p.into_inner());
     let tokens = secrets
         .load()?
         .gog

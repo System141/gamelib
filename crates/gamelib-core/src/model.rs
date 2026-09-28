@@ -718,3 +718,105 @@ pub struct SettingsPatch {
     pub keep_installers: Option<bool>,
     pub auto_update: Option<bool>,
 }
+
+// ---------------------------------------------------------------------------
+// Downloads
+// ---------------------------------------------------------------------------
+
+/// A downloadable variant of a store product (a GOG installer, an itch.io upload).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileOption {
+    pub id: String,
+    pub label: String,
+    pub platform: Option<Platform>,
+    /// Installer language code (GOG), e.g. "tr", "en".
+    pub language: Option<String>,
+    pub version: Option<String>,
+    /// Total bytes (0 if unknown).
+    pub size: u64,
+    pub files: u32,
+    pub demo: bool,
+    /// The best choice for this computer.
+    pub recommended: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DownloadState {
+    Queued,
+    Downloading,
+    Paused,
+    Completed,
+    Failed,
+}
+
+impl DownloadState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DownloadState::Queued => "queued",
+            DownloadState::Downloading => "downloading",
+            DownloadState::Paused => "paused",
+            DownloadState::Completed => "completed",
+            DownloadState::Failed => "failed",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "downloading" => DownloadState::Downloading,
+            "paused" => DownloadState::Paused,
+            "completed" => DownloadState::Completed,
+            "failed" => DownloadState::Failed,
+            _ => DownloadState::Queued,
+        }
+    }
+}
+
+/// A download in the queue (also the payload of `download:state`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Download {
+    pub id: i64,
+    pub store: Store,
+    pub product_id: String,
+    pub appid: Option<u32>,
+    pub title: String,
+    pub option_id: String,
+    pub option_label: Option<String>,
+    pub platform: Option<Platform>,
+    pub state: DownloadState,
+    pub total_bytes: u64,
+    pub done_bytes: u64,
+    /// Folder the files are downloaded to.
+    pub dir: String,
+    pub files: u32,
+    /// Why it failed: an error kind and message, as for commands.
+    pub error: Option<ErrorInfo>,
+    pub created_at: i64,
+    pub finished_at: Option<i64>,
+}
+
+/// Live progress of the running download (payload of `download:progress`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadProgress {
+    pub id: i64,
+    pub done_bytes: u64,
+    pub total_bytes: u64,
+    /// Bytes per second, averaged over the last seconds.
+    pub speed: u64,
+    /// Seconds left at the current speed.
+    pub eta: Option<u64>,
+    /// "downloading" or "verifying".
+    pub stage: String,
+}
+
+/// The download list with the running download's live progress.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadList {
+    /// Newest first.
+    pub items: Vec<Download>,
+    pub live: Option<DownloadProgress>,
+}

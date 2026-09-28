@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import type { Accounts, GameLink, LinkInput, MatchState, Settings, Store, StoreMatch, TagInfo } from "../lib/types";
+import type { Accounts, Download, DownloadList, GameLink, LinkInput, MatchState, Settings, Store, StoreMatch, TagInfo } from "../lib/types";
 
 export function useStatus() {
   return useQuery({
@@ -164,4 +164,48 @@ export function useSettings() {
 export function useSettingsUpdate() {
   const qc = useQueryClient();
   return (settings: Settings) => qc.setQueryData(["settings"], settings);
+}
+
+// --- downloads ------------------------------------------------------------------------------
+
+/** The download list; `useDownloadEvents` keeps it current between fetches. */
+export function useDownloads() {
+  return useQuery({ queryKey: ["downloads"], queryFn: api.getDownloads });
+}
+
+/** What can be downloaded for a product, asked when the picker opens. */
+export function useStoreFiles(store: Store, productId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["store-files", store, productId],
+    queryFn: () => api.getStoreFiles(store, productId),
+    enabled,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useEnqueueDownload() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ store, productId, optionId }: { store: Store; productId: string; optionId: string }) =>
+      api.enqueueDownload(store, productId, optionId),
+    onSuccess: (download) => {
+      qc.setQueryData<DownloadList>(["downloads"], (list) => upsertDownload(list, download));
+    },
+  });
+}
+
+/** Puts a download into the list (replacing an older copy of it), newest first. */
+export function upsertDownload(list: DownloadList | undefined, download: Download): DownloadList {
+  const items = list?.items ?? [];
+  const known = items.some((d) => d.id === download.id);
+  return {
+    items: known ? items.map((d) => (d.id === download.id ? download : d)) : [download, ...items],
+    live: list?.live ?? null,
+  };
+}
+
+/** The most recent download of a product, if any. */
+export function downloadOf(list: DownloadList | undefined, store: Store, productId: string): Download | undefined {
+  return list?.items.find((d) => d.store === store && d.productId === productId);
 }

@@ -569,6 +569,27 @@ pub fn library(conn: &Connection, store: Option<Store>) -> Result<Vec<LibraryIte
     Ok(items)
 }
 
+/// A product's title and the Steam game it is confidently tied to (for a download's record).
+pub fn product_summary(
+    conn: &Connection,
+    store: Store,
+    product_id: &str,
+) -> Result<Option<(String, Option<u32>)>> {
+    Ok(conn
+        .query_row(
+            &format!(
+                "SELECT p.title, (SELECT m.appid FROM store_matches m
+                                  WHERE m.store = p.store AND m.product_id = p.product_id
+                                    AND {CONFIDENT_SQL}
+                                  ORDER BY m.score DESC, m.appid LIMIT 1)
+                 FROM store_products p WHERE p.store = ?1 AND p.product_id = ?2"
+            ),
+            params![store.as_str(), product_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?)
+}
+
 /// Distinct Steam games with a confident match in `store`.
 pub fn matched_games(conn: &Connection, store: Store) -> Result<u32> {
     Ok(conn.query_row(

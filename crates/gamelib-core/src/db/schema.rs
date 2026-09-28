@@ -183,7 +183,48 @@ CREATE TABLE store_lookups(
 ) WITHOUT ROWID;
 "#;
 
-const MIGRATIONS: &[&str] = &[MIGRATION_1, MIGRATION_2];
+/// The download queue. Files keep a stable reference (a GOG downlink, an itch.io upload id)
+/// that is turned into a fresh signed address whenever a transfer (re)starts.
+const MIGRATION_3: &str = r#"
+CREATE TABLE downloads(
+  id           INTEGER PRIMARY KEY,
+  store        TEXT NOT NULL,
+  product_id   TEXT NOT NULL,
+  appid        INTEGER,
+  title        TEXT NOT NULL,
+  option_id    TEXT NOT NULL,
+  option_label TEXT,
+  platform     TEXT,
+  state        TEXT NOT NULL,
+  total_bytes  INTEGER NOT NULL DEFAULT 0,
+  done_bytes   INTEGER NOT NULL DEFAULT 0,
+  dir          TEXT NOT NULL DEFAULT '',
+  error_kind   TEXT,
+  error        TEXT,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL,
+  finished_at  INTEGER
+);
+
+CREATE INDEX idx_downloads_state ON downloads(state, created_at);
+
+CREATE TABLE download_files(
+  id            INTEGER PRIMARY KEY,
+  download_id   INTEGER NOT NULL,
+  position      INTEGER NOT NULL,
+  source        TEXT NOT NULL,
+  size          INTEGER,
+  file_name     TEXT,
+  md5           TEXT,
+  etag          TEXT,
+  last_modified TEXT,
+  done          INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_download_files ON download_files(download_id, position);
+"#;
+
+const MIGRATIONS: &[&str] = &[MIGRATION_1, MIGRATION_2, MIGRATION_3];
 
 /// Schema version this build expects.
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();

@@ -8,6 +8,10 @@ import type {
   Accounts,
   AppStatus,
   CmdError,
+  Download,
+  DownloadList,
+  DownloadProgress,
+  FileOption,
   GameCard,
   GameDetail,
   GameLink,
@@ -67,6 +71,11 @@ export class MockBackend {
   private owned = new Set<string>();
   private itchLibrary: LibraryItem[] = [];
   private settings: Settings = { libraryDir: "C:\\Users\\oyuncu\\Games", keepInstallers: false, autoUpdate: true };
+  private downloads: Download[] = [];
+  private live: DownloadProgress | null = null;
+  private nextDownloadId = 1;
+  /** The simulated transfer's timer, while one runs. */
+  private transfer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private fixture: Fixture,
@@ -171,6 +180,26 @@ export class MockBackend {
         await sleep(300);
         this.settings = { ...this.settings, libraryDir: "D:\\Oyunlar" };
         return this.settings;
+      case "get_store_files":
+        await sleep(500);
+        return this.storeFiles(args.store, args.productId);
+      case "enqueue_download":
+        return this.enqueue(args.store, args.productId, args.optionId);
+      case "get_downloads":
+        return { items: this.downloads, live: this.live } satisfies DownloadList;
+      case "pause_download":
+        return this.pauseDownload(args.id);
+      case "resume_download":
+        return this.resumeDownload(args.id);
+      case "remove_download":
+        return this.removeDownload(args.id);
+      case "clear_finished_downloads":
+        for (const d of this.downloads.filter((x) => x.state === "completed")) this.emit("download:state", { id: d.id, removed: true });
+        this.downloads = this.downloads.filter((d) => d.state !== "completed");
+        return null;
+      case "open_download_folder":
+        console.info(`[mock] ${cmd}`, args);
+        return null;
       case "list_sites":
         return SITES;
       case "list_links":
@@ -295,6 +324,172 @@ export class MockBackend {
       }
     }
     return [...gog, ...this.itchLibrary].sort((a, b) => a.title.localeCompare(b.title, "tr"));
+  }
+
+  // --- downloads -------------------------------------------------------------------------------
+
+  /** A store's variants for a product, like the real APIs list them. */
+  private storeFiles(store: Store, productId: string): FileOption[] {
+    if (!this.accounts[store]) throw invalid(store === "gog" ? "gog_signed_out" : "itch_signed_out");
+    const title = this.productTitle(store, productId);
+    const slug =
+      fold(title)
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "") || "game";
+    const option = (id: string, label: string, platform: FileOption["platform"], size: number, extra: Partial<FileOption> = {}) =>
+      ({
+        id,
+        label,
+        platform,
+        language: null,
+        version: null,
+        size,
+        files: 1,
+        demo: false,
+        recommended: false,
+        ...extra,
+      }) satisfies FileOption;
+    if (store === "gog") {
+      const gb = 1024 ** 3;
+      return [
+        option("installer_windows_tr", "Windows · Türkçe · 1.6.2", "win", 23.4 * gb, {
+          language: "tr",
+          version: "1.6.2",
+          files: 6,
+          recommended: true,
+        }),
+        option("installer_windows_en", "Windows · English · 1.6.2", "win", 23.1 * gb, { language: "en", version: "1.6.2", files: 6 }),
+        option("installer_mac_en", "macOS · English · 1.6.2", "mac", 24.8 * gb, { language: "en", version: "1.6.2" }),
+      ];
+    }
+    const mb = 1024 ** 2;
+    return [
+      option("1", `${slug}-windows.zip`, "win", 812 * mb, { recommended: true }),
+      option("2", `${slug}-linux.tar.gz`, "linux", 798 * mb),
+      option("3", "Demo", "win", 210 * mb, { demo: true }),
+    ];
+  }
+
+  private productTitle(store: Store, productId: string): string {
+    const owned = this.library().find((i) => i.store === store && i.productId === productId);
+    if (owned) return owned.title;
+    for (const list of this.matches.values()) {
+      const m = list.find((x) => x.store === store && x.productId === productId);
+      if (m) return m.title;
+    }
+    throw { kind: "not_found", message: "not found" } satisfies CmdError;
+  }
+
+  private enqueue(store: Store, productId: string, optionId: string): Download {
+    const existing = this.downloads.find(
+      (d) => d.store === store && d.productId === productId && d.optionId === optionId && d.state !== "completed",
+    );
+    if (existing) {
+      this.resumeDownload(existing.id);
+      return existing;
+    }
+    const option = this.storeFiles(store, productId).find((o) => o.id === optionId);
+    if (!option) throw invalid("no_files");
+    const appid = this.library().find((i) => i.store === store && i.productId === productId)?.appid ?? null;
+    const id = this.nextDownloadId++;
+    const download: Download = {
+      id,
+      store,
+      productId,
+      appid,
+      title: this.productTitle(store, productId),
+      optionId,
+      optionLabel: option.label,
+      platform: option.platform,
+      state: "queued",
+      totalBytes: option.size,
+      doneBytes: 0,
+      dir: `${this.settings.libraryDir}\\.gamelib\\downloads\\${id}`,
+      files: option.files,
+      error: null,
+      createdAt: nowSeconds(),
+      finishedAt: null,
+    };
+    this.downloads = [download, ...this.downloads];
+    this.emit("download:state", download);
+    this.pump();
+    return download;
+  }
+
+  private setDownload(id: number, patch: Partial<Download>): Download | undefined {
+    const d = this.downloads.find((x) => x.id === id);
+    if (!d) return undefined;
+    Object.assign(d, patch);
+    this.emit("download:state", { ...d });
+    return d;
+  }
+
+  private pauseDownload(id: number): null {
+    const d = this.downloads.find((x) => x.id === id);
+    if (!d) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    if (d.state === "downloading") this.stopTransfer();
+    if (d.state === "downloading" || d.state === "queued") this.setDownload(id, { state: "paused" });
+    this.pump();
+    return null;
+  }
+
+  private resumeDownload(id: number): null {
+    const d = this.downloads.find((x) => x.id === id);
+    if (!d) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    if (d.state === "paused" || d.state === "failed") this.setDownload(id, { state: "queued", error: null });
+    this.pump();
+    return null;
+  }
+
+  private removeDownload(id: number): null {
+    const d = this.downloads.find((x) => x.id === id);
+    if (!d) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    if (d.state === "downloading") this.stopTransfer();
+    this.downloads = this.downloads.filter((x) => x.id !== id);
+    this.emit("download:state", { id, removed: true });
+    this.pump();
+    return null;
+  }
+
+  private stopTransfer() {
+    if (this.transfer) clearInterval(this.transfer);
+    this.transfer = null;
+    this.live = null;
+  }
+
+  /** Starts the oldest queued download when nothing runs. Each takes about 12 seconds. */
+  private pump() {
+    if (this.transfer || this.downloads.some((d) => d.state === "downloading")) return;
+    const next = [...this.downloads].reverse().find((d) => d.state === "queued");
+    if (!next) return;
+    this.setDownload(next.id, { state: "downloading" });
+    const step = Math.max(1, Math.round(next.totalBytes / 48));
+    let verifying = 0;
+    this.transfer = setInterval(() => {
+      const d = this.downloads.find((x) => x.id === next.id);
+      if (!d || d.state !== "downloading") return this.stopTransfer();
+      if (d.doneBytes >= d.totalBytes) {
+        verifying += 1;
+        this.live = { id: d.id, doneBytes: d.doneBytes, totalBytes: d.totalBytes, speed: 0, eta: 0, stage: "verifying" };
+        this.emit("download:progress", this.live);
+        if (verifying < 4) return;
+        this.stopTransfer();
+        this.setDownload(d.id, { state: "completed", finishedAt: nowSeconds() });
+        this.pump();
+        return;
+      }
+      d.doneBytes = Math.min(d.totalBytes, d.doneBytes + Math.round(step * (0.8 + Math.random() * 0.4)));
+      const speed = step * 4;
+      this.live = {
+        id: d.id,
+        doneBytes: d.doneBytes,
+        totalBytes: d.totalBytes,
+        speed,
+        eta: Math.ceil((d.totalBytes - d.doneBytes) / speed),
+        stage: "downloading",
+      };
+      this.emit("download:progress", this.live);
+    }, 250);
   }
 
   private searchStore(appid: number): StoreSearchHit[] {

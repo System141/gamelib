@@ -1,8 +1,8 @@
 // Dev-only bridge to `gamelib-cli serve` (crates/gamelib-cli/src/serve.rs), reached through the
 // `/api` proxy in vite.config.ts. Every `invoke` becomes `POST /api/<command>` with the same JSON
-// arguments; catalog job events arrive as server-sent events from `/api/events`.
+// arguments; job and download events arrive as server-sent events from `/api/events`.
 
-import { EVENT_FINISHED, EVENT_PROGRESS } from "../lib/api";
+import { EVENT_DOWNLOAD_PROGRESS, EVENT_DOWNLOAD_STATE, EVENT_FINISHED, EVENT_PROGRESS } from "../lib/api";
 import type { CmdError } from "../lib/types";
 import type { Emit } from "./install";
 
@@ -69,7 +69,7 @@ function streamEvents(emit: Emit) {
   let delay = 1000;
   const connect = () => {
     const source = new EventSource("/api/events");
-    for (const name of [EVENT_PROGRESS, EVENT_FINISHED]) {
+    for (const name of [EVENT_PROGRESS, EVENT_FINISHED, EVENT_DOWNLOAD_PROGRESS, EVENT_DOWNLOAD_STATE]) {
       source.addEventListener(name, (e) => emit(name, JSON.parse((e as MessageEvent<string>).data)));
     }
     source.onopen = () => {

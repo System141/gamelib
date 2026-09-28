@@ -344,3 +344,67 @@ export interface Settings {
 }
 
 export type SettingsPatch = Partial<Settings>;
+
+// --- downloads --------------------------------------------------------------------------------
+
+/** A downloadable variant of a store product (a GOG installer, an itch.io upload). */
+export interface FileOption {
+  id: string;
+  label: string;
+  platform: Platform | null;
+  /** Installer language code (GOG), e.g. "tr", "en". */
+  language: string | null;
+  version: string | null;
+  /** Total bytes (0 if unknown). */
+  size: number;
+  files: number;
+  demo: boolean;
+  /** The best choice for this computer. */
+  recommended: boolean;
+}
+
+export type DownloadState = "queued" | "downloading" | "paused" | "completed" | "failed";
+
+export interface Download {
+  id: number;
+  store: Store;
+  productId: string;
+  appid: number | null;
+  title: string;
+  optionId: string;
+  optionLabel: string | null;
+  platform: Platform | null;
+  state: DownloadState;
+  totalBytes: number;
+  doneBytes: number;
+  /** Folder the files are downloaded to. */
+  dir: string;
+  files: number;
+  error: CmdError | null;
+  createdAt: number;
+  finishedAt: number | null;
+}
+
+/** Live progress of the running download (`download:progress`). */
+export interface DownloadProgress {
+  id: number;
+  doneBytes: number;
+  totalBytes: number;
+  /** Bytes per second. */
+  speed: number;
+  /** Seconds left. */
+  eta: number | null;
+  stage: "downloading" | "verifying";
+}
+
+export interface DownloadList {
+  /** Newest first. */
+  items: Download[];
+  live: DownloadProgress | null;
+}
+
+/** `download:state` payload when a download was removed. */
+export interface DownloadRemoved {
+  id: number;
+  removed: true;
+}

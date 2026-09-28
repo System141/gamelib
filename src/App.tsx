@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { EmptyState, SyncBanner, Toasts } from "./components/Feedback";
 import { FilterSheet } from "./components/FilterSheet";
 import { FirstRun } from "./components/FirstRun";
+import { DownloadsView } from "./components/DownloadsView";
 import { GameDetailDialog } from "./components/GameDetailDialog";
 import { GameGrid } from "./components/GameGrid";
 import { LibraryView } from "./components/LibraryView";
@@ -12,6 +13,7 @@ import { TopBar } from "./components/TopBar";
 import { ViewHeader } from "./components/ViewHeader";
 import { useStatus, useTags } from "./hooks/useData";
 import { useFilters } from "./hooks/useFilters";
+import { useDownloadEvents } from "./hooks/useDownloadEvents";
 import { useSyncEvents } from "./hooks/useSyncEvents";
 import { errorText } from "./i18n/tr";
 import { api, toCmdError } from "./lib/api";
@@ -20,6 +22,7 @@ import type { AppStatus, WorkerKind } from "./lib/types";
 
 export function App() {
   useSyncEvents();
+  useDownloadEvents();
   const qc = useQueryClient();
   const status = useStatus();
   const f = useFilters();
@@ -75,6 +78,8 @@ export function App() {
               onRefresh={librarySync}
               onOpenSettings={() => f.setView("settings")}
             />
+          ) : f.view === "downloads" ? (
+            <DownloadsView search={f.search} onOpenGame={openGame} onOpenLibrary={() => f.setView("library")} />
           ) : f.view === "settings" ? (
             <SettingsView status={status.data} />
           ) : (

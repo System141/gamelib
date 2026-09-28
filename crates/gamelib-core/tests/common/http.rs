@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct Request {
@@ -32,6 +33,10 @@ pub struct Response {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+    /// Sends the body in pieces of this size with a pause after each (a slow server).
+    pub pace: Option<(usize, Duration)>,
+    /// Closes the connection after this many body bytes (a dropped transfer).
+    pub cut_at: Option<usize>,
 }
 
 impl Response {
@@ -40,6 +45,8 @@ impl Response {
             status: 200,
             headers: vec![("Content-Type".into(), "application/json".into())],
             body: body.into().into_bytes(),
+            pace: None,
+            cut_at: None,
         }
     }
 
@@ -48,6 +55,8 @@ impl Response {
             status,
             headers: Vec::new(),
             body: Vec::new(),
+            pace: None,
+            cut_at: None,
         }
     }
 
@@ -58,6 +67,16 @@ impl Response {
 
     pub fn with_body(mut self, body: impl Into<Vec<u8>>) -> Self {
         self.body = body.into();
+        self
+    }
+
+    pub fn paced(mut self, chunk: usize, pause: Duration) -> Self {
+        self.pace = Some((chunk, pause));
+        self
+    }
+
+    pub fn cut_at(mut self, bytes: usize) -> Self {
+        self.cut_at = Some(bytes);
         self
     }
 }
@@ -143,8 +162,30 @@ fn serve(mut stream: TcpStream, handler: &dyn Fn(&Request) -> Response, log: &Mu
     }
     head.push_str("\r\n");
     let _ = stream.write_all(head.as_bytes());
-    if request.method != "HEAD" {
-        let _ = stream.write_all(&response.body);
+    if request.method == "HEAD" {
+        return;
+    }
+    let body = match response.cut_at {
+        Some(n) => &response.body[..n.min(response.body.len())],
+        None => &response.body[..],
+    };
+    match response.pace {
+        Some((chunk, pause)) => {
+            for piece in body.chunks(chunk.max(1)) {
+                if stream.write_all(piece).is_err() {
+                    return;
+                }
+                let _ = stream.flush();
+                std::thread::sleep(pause);
+            }
+        }
+        None => {
+            let _ = stream.write_all(body);
+        }
+    }
+    let _ = stream.flush();
+    if response.cut_at.is_some() {
+        let _ = stream.shutdown(std::net::Shutdown::Both);
     }
 }
 

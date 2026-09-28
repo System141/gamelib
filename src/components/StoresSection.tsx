@@ -10,6 +10,7 @@ import type { MatchState, StoreMatch, StoreSearchHit } from "../lib/types";
 import { useAccounts, useLinkStoreProduct, useSetMatchState, useStatus, useStoreLookup, useStoreMatches } from "../hooks/useData";
 import { StoreMark } from "./badges";
 import { AppleIcon, LinuxIcon, WindowsIcon } from "./icons";
+import { DownloadButton, DownloadLine, useProductDownload } from "./DownloadPicker";
 import { SmallButton } from "./ui";
 
 interface Props {
@@ -154,6 +155,9 @@ function useVerdict(appid: number) {
 
 function MatchRow({ match, appid }: { match: StoreMatch; appid: number }) {
   const verdict = useVerdict(appid);
+  const accounts = useAccounts();
+  const { download, live } = useProductDownload(match.store, match.productId);
+  const canDownload = !!accounts.data?.[match.store] && (match.owned || (match.store === "itch" && match.isFree));
   const image = match.coverWide ?? match.cover;
   const open = () =>
     api.openStorePage(match.store, match.productId).catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
@@ -191,9 +195,12 @@ function MatchRow({ match, appid }: { match: StoreMatch; appid: number }) {
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <SmallButton tone="primary" onClick={open} icon={<ExternalLink size={13} />}>
-            {tr.stores.openIn[match.store]}
-          </SmallButton>
+          <span className="flex gap-1.5">
+            {canDownload && !download && <DownloadButton store={match.store} productId={match.productId} title={match.title} />}
+            <SmallButton tone={canDownload ? "default" : "primary"} onClick={open} icon={<ExternalLink size={13} />}>
+              {tr.stores.openIn[match.store]}
+            </SmallButton>
+          </span>
           {byTitle ? (
             <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-400">
               {tr.stores.askCorrect}
@@ -211,6 +218,11 @@ function MatchRow({ match, appid }: { match: StoreMatch; appid: number }) {
           )}
         </div>
       </div>
+      {download && (
+        <div className="mt-3 border-t border-white/6 pt-2.5">
+          <DownloadLine download={download} live={live} />
+        </div>
+      )}
     </div>
   );
 }

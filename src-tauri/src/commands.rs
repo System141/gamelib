@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use gamelib_core::app::{App, steam_url};
 use gamelib_core::model::{
-    Accounts, AppStatus, GameDetail, GameLink, GameMedia, GamePage, GameQuery, LibraryItem,
-    LinkCheck, LinkInput, MatchState, OpenTarget, Settings, SettingsPatch, SiteInfo, Store,
-    StoreMatch, StoreSearchHit, TagInfo,
+    Accounts, AppStatus, Download, DownloadList, FileOption, GameDetail, GameLink, GameMedia,
+    GamePage, GameQuery, LibraryItem, LinkCheck, LinkInput, MatchState, OpenTarget, Settings,
+    SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, TagInfo,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -255,6 +255,71 @@ pub async fn pick_library_dir(
     blocking(&app, move |app| app.update_settings(&patch))
         .await
         .map(Some)
+}
+
+// --- downloads ------------------------------------------------------------------------------
+
+/// What can be downloaded for a store product, the best variant for this computer first.
+#[tauri::command]
+pub async fn get_store_files(
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+) -> CmdResult<Vec<FileOption>> {
+    blocking(&app, move |app| app.store_files(store, &product_id)).await
+}
+
+#[tauri::command]
+pub async fn enqueue_download(
+    app: State<'_, Arc<App>>,
+    store: Store,
+    product_id: String,
+    option_id: String,
+) -> CmdResult<Download> {
+    blocking(&app, move |app| {
+        app.enqueue_download(store, &product_id, &option_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn get_downloads(app: State<'_, Arc<App>>) -> CmdResult<DownloadList> {
+    blocking(&app, App::downloads).await
+}
+
+#[tauri::command]
+pub async fn pause_download(app: State<'_, Arc<App>>, id: i64) -> CmdResult<()> {
+    blocking(&app, move |app| app.pause_download(id)).await
+}
+
+#[tauri::command]
+pub async fn resume_download(app: State<'_, Arc<App>>, id: i64) -> CmdResult<()> {
+    blocking(&app, move |app| app.resume_download(id)).await
+}
+
+/// Cancels a download and deletes its files.
+#[tauri::command]
+pub async fn remove_download(app: State<'_, Arc<App>>, id: i64) -> CmdResult<()> {
+    blocking(&app, move |app| app.remove_download(id)).await
+}
+
+#[tauri::command]
+pub async fn clear_finished_downloads(app: State<'_, Arc<App>>) -> CmdResult<()> {
+    blocking(&app, App::clear_finished_downloads).await
+}
+
+/// Opens a download's folder in the file manager.
+#[tauri::command]
+pub async fn open_download_folder(
+    handle: AppHandle,
+    app: State<'_, Arc<App>>,
+    id: i64,
+) -> CmdResult<()> {
+    let dir = blocking(&app, move |app| app.download_folder(id)).await?;
+    handle
+        .opener()
+        .open_path(dir.display().to_string(), None::<&str>)
+        .map_err(|e| CmdError::other(e.to_string()))
 }
 
 // --- external links -------------------------------------------------------------------------

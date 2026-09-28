@@ -6,11 +6,13 @@
 //! - [`links`]: validation, per-site handlers and redirect checks for non-Steam links.
 //! - [`stores`]: other stores (GOG, itch.io): their catalogs, and matching them to Steam games.
 //! - [`http`]: the shared HTTP client, retries and request pacing.
+//! - [`downloads`]: the download queue for GOG and itch.io files, with resume and checksums.
 //! - [`app`]: the command layer shared by the desktop app and `gamelib-cli serve`.
 
 pub mod app;
 mod date;
 pub mod db;
+pub mod downloads;
 pub mod error;
 pub mod http;
 pub mod links;

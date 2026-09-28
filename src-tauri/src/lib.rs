@@ -7,7 +7,7 @@ use std::sync::Arc;
 use gamelib_core::app::{App, EventSink};
 use tauri::{AppHandle, Emitter, Manager};
 
-/// Forwards catalog job events to the webview.
+/// Forwards job and download events to the webview.
 struct TauriSink(AppHandle);
 
 impl EventSink for TauriSink {
@@ -25,7 +25,12 @@ pub fn run() {
             // `gamelib-cli` uses the same file by default (see crates/gamelib-cli/src/main.rs).
             let dir = app.path().app_local_data_dir()?;
             let sink = Arc::new(TauriSink(app.handle().clone()));
-            app.manage(Arc::new(App::open(dir.join("gamelib.db"), sink)?));
+            let core = Arc::new(App::open(dir.join("gamelib.db"), sink)?);
+            // Downloads interrupted by the last exit continue now.
+            if let Err(e) = core.start_downloads() {
+                eprintln!("could not start downloads: {e}");
+            }
+            app.manage(core);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -57,6 +62,14 @@ pub fn run() {
             commands::get_settings,
             commands::update_settings,
             commands::pick_library_dir,
+            commands::get_store_files,
+            commands::enqueue_download,
+            commands::get_downloads,
+            commands::pause_download,
+            commands::resume_download,
+            commands::remove_download,
+            commands::clear_finished_downloads,
+            commands::open_download_folder,
             commands::list_sites,
             commands::list_links,
             commands::save_link,
