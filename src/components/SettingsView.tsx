@@ -1,13 +1,26 @@
 // "Ayarlar": store accounts, the library folder and data locations.
 
 import clsx from "clsx";
-import { CircleCheck, ExternalLink, FolderOpen, KeyRound, LoaderCircle, LogIn, LogOut, ShieldCheck } from "lucide-react";
+import {
+  ArrowUpCircle,
+  CircleCheck,
+  ExternalLink,
+  FolderOpen,
+  KeyRound,
+  LoaderCircle,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  ShieldCheck,
+} from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
+import { formatRelative } from "../lib/format";
 import { showToast } from "../lib/toast";
 import type { Accounts, AppStatus, CmdError, Store } from "../lib/types";
 import { useAccounts, useAccountsUpdate, useSettings, useSettingsUpdate } from "../hooks/useData";
+import { useCheckUpdate, useInstallUpdate, useUpdateStatus } from "../hooks/useUpdater";
 import { StoreMark } from "./badges";
 import { SmallButton } from "./ui";
 
@@ -25,6 +38,10 @@ export function SettingsView({ status }: { status: AppStatus | undefined }) {
 
         <Section title={tr.settings.libraryTitle} icon={<FolderOpen size={17} className="text-accent" />}>
           <LibraryFolder />
+        </Section>
+
+        <Section title={tr.update.title} icon={<ArrowUpCircle size={17} className="text-accent" />}>
+          <Updates />
         </Section>
 
         <Section title={tr.settings.dataTitle}>
@@ -317,7 +334,7 @@ function LibraryFolder() {
         </form>
       )}
       <label className="mt-4 flex cursor-pointer items-start gap-3">
-        <Switch on={settings.data?.keepInstallers ?? false} onChange={toggleKeep} />
+        <Switch on={settings.data?.keepInstallers ?? false} onChange={toggleKeep} label={tr.settings.keepInstallers} />
         <span>
           <span className="block text-sm text-ink-100">{tr.settings.keepInstallers}</span>
           <span className="block text-xs text-ink-400">{tr.settings.keepInstallersHint}</span>
@@ -327,12 +344,90 @@ function LibraryFolder() {
   );
 }
 
-function Switch({ on, onChange }: { on: boolean; onChange: () => void }) {
+/** The version, a manual check, installing a found update and the automatic-check setting. */
+function Updates() {
+  const status = useUpdateStatus().data;
+  const check = useCheckUpdate();
+  const { install, installing, progress } = useInstallUpdate();
+  const settings = useSettings();
+  const update = useSettingsUpdate();
+  const [checking, setChecking] = useState(false);
+  const run = () => {
+    setChecking(true);
+    check()
+      .catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }))
+      .finally(() => setChecking(false));
+  };
+  const toggleAuto = () =>
+    settings.data &&
+    api
+      .updateSettings({ autoUpdate: !settings.data.autoUpdate })
+      .then(update)
+      .catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
+  const found = status?.update;
+  const pct = progress?.total ? Math.min(100, (progress.downloaded / progress.total) * 100) : null;
+
+  return (
+    <div className="rounded-xl bg-ink-800/70 p-4 ring-1 ring-white/6">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-ink-50">{status ? tr.update.version(status.currentVersion) : "GameLib"}</div>
+          <div className="mt-0.5 text-[13px] text-ink-400">
+            {installing
+              ? tr.update.downloading(found?.version ?? "")
+              : checking
+                ? tr.update.checking
+                : !status
+                  ? ""
+                  : !status.configured
+                    ? tr.update.notConfigured
+                    : found
+                      ? tr.update.ready(found.version)
+                      : status.checkedAt != null
+                        ? tr.update.upToDate(formatRelative(status.checkedAt))
+                        : tr.update.notChecked}
+          </div>
+        </div>
+        {found && status?.configured ? (
+          <SmallButton
+            tone="primary"
+            onClick={install}
+            disabled={installing}
+            icon={installing ? <LoaderCircle size={13} className="animate-spin" /> : <ArrowUpCircle size={13} />}
+          >
+            {installing && pct != null ? `%${Math.round(pct)}` : tr.update.install}
+          </SmallButton>
+        ) : status && !status.configured ? (
+          <SmallButton onClick={() => void api.openReleasePage(null).catch(() => undefined)} icon={<ExternalLink size={13} />}>
+            {tr.update.releases}
+          </SmallButton>
+        ) : null}
+        <SmallButton
+          onClick={run}
+          disabled={checking || installing}
+          icon={checking ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+        >
+          {tr.update.check}
+        </SmallButton>
+      </div>
+      <label className="mt-4 flex cursor-pointer items-start gap-3">
+        <Switch on={settings.data?.autoUpdate ?? true} onChange={toggleAuto} label={tr.update.auto} />
+        <span>
+          <span className="block text-sm text-ink-100">{tr.update.auto}</span>
+          <span className="block text-xs text-ink-400">{tr.update.autoHint}</span>
+        </span>
+      </label>
+    </div>
+  );
+}
+
+function Switch({ on, onChange, label }: { on: boolean; onChange: () => void; label: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
+      aria-label={label}
       onClick={onChange}
       className={clsx(
         "relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full ring-1 transition",

@@ -647,6 +647,11 @@ impl App {
         install::list(lock(&self.reader).conn())
     }
 
+    /// Whether a game's installer or archive is being worked on right now.
+    pub fn install_running(&self) -> bool {
+        self.installs.live().is_some()
+    }
+
     pub fn launch_game(&self, store: Store, product_id: &str) -> Result<()> {
         install::launch(lock(&self.reader).conn(), store, product_id)
     }
@@ -848,6 +853,24 @@ pub fn steam_url(appid: u32, target: OpenTarget) -> String {
     }
 }
 
+/// GameLib's releases on GitHub, where updates come from.
+pub const RELEASES_URL: &str = "https://github.com/System141/gamelib/releases";
+
+/// The page of release `version` (X.Y.Z), or the list of releases.
+pub fn release_page(version: Option<&str>) -> Result<String> {
+    match version {
+        None => Ok(RELEASES_URL.to_owned()),
+        Some(v)
+            if v.split('.').count() == 3
+                && v.split('.')
+                    .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())) =>
+        {
+            Ok(format!("{RELEASES_URL}/tag/v{v}"))
+        }
+        Some(_) => Err(Error::Invalid("version")),
+    }
+}
+
 /// The user's settings, with defaults for what was never set.
 pub(crate) fn read_settings(conn: &rusqlite::Connection) -> Result<Settings> {
     let flag = |key: &str, default: bool| -> Result<bool> {
@@ -951,4 +974,21 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
 /// Locks a mutex, recovering from poisoning (a panicked query must not brick the app).
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn release_pages() {
+        assert_eq!(release_page(None).unwrap(), RELEASES_URL);
+        assert_eq!(
+            release_page(Some("0.2.10")).unwrap(),
+            format!("{RELEASES_URL}/tag/v0.2.10")
+        );
+        for bad in ["", "0.2", "0.2.0.1", "+0.2.0", "0.2.x", "../../x", "0..2"] {
+            assert!(release_page(Some(bad)).is_err(), "{bad}");
+        }
+    }
 }

@@ -1,6 +1,10 @@
 # Checks every push. Installers are built on demand (Actions → Build → Run workflow), for pushes
-# whose last commit message contains "[installer]" (Windows only), and for version tags (v*),
-# which also publish them as a GitHub release.
+# whose last commit message contains "[installer]" (Windows only), and for version tags (v*).
+#
+# Releasing: Actions → Build → Run workflow with "release_version" (e.g. 0.2.0) sets that version
+# everywhere, commits and tags it, builds all three systems and publishes a GitHub release. With
+# the TAURI_SIGNING_PRIVATE_KEY secret (and the TAURI_UPDATER_PUBKEY variable) the release also
+# carries signed update files and latest.json, from which installed copies update themselves.
 name: Build
 
 on:
@@ -11,10 +15,14 @@ on:
   workflow_dispatch:
     inputs:
       platforms:
-        description: Kurulum paketi üretilecek sistemler
+        description: Kurulum paketi üretilecek sistemler (sürüm yayımlanırken hepsi)
         type: choice
         options: [windows, all, macos, linux]
         default: windows
+      release_version:
+        description: "Yayımlanacak sürüm, ör. 0.2.0 (boş bırakılırsa yalnızca kurulum paketleri üretilir)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -74,18 +82,58 @@ jobs:
       - run: cargo clippy -p gamelib-core -p gamelib-cli --all-targets --locked -- -D warnings
       - run: cargo test -p gamelib-core -p gamelib-cli --locked
 
+  prepare:
+    name: Prepare release
+    if: github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set the version
+        env:
+          VERSION: ${{ inputs.release_version }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" != branch ]; then
+            echo "::error::Sürüm bir daldan yayımlanır; iş akışını bir dal seçerek çalıştır."; exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Sürüm X.Y.Z biçiminde olmalı (ör. 0.2.0): $VERSION"; exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "::error::v$VERSION etiketi zaten var."; exit 1
+          fi
+          node scripts/set-version.mjs "$VERSION"
+          cargo metadata --locked --format-version 1 > /dev/null
+      - name: Commit and tag
+        id: tag
+        env:
+          VERSION: ${{ inputs.release_version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then git commit -am "Sürüm $VERSION"; fi
+          git tag "v$VERSION"
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME" "refs/tags/v$VERSION"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
   plan:
     name: Plan installers
+    needs: prepare
     if: >-
+      !cancelled() && needs.prepare.result != 'failure' && (
       github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') ||
-      contains(github.event.head_commit.message, '[installer]')
+      contains(github.event.head_commit.message, '[installer]'))
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - id: plan
         env:
-          PLATFORMS: ${{ inputs.platforms || (startsWith(github.ref, 'refs/tags/v') && 'all') || 'windows' }}
+          PLATFORMS: >-
+            ${{ (needs.prepare.outputs.tag != '' || startsWith(github.ref, 'refs/tags/v')) && 'all' || inputs.platforms || 'windows' }}
         run: |
           all='[
             {"platform": "windows", "os": "windows-latest", "args": "--bundles nsis"},
@@ -96,19 +144,32 @@ jobs:
 
   bundle:
     name: Installer (${{ matrix.platform }})
-    needs: plan
+    needs: [prepare, plan]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.tag || github.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Check the version
+        if: needs.prepare.outputs.tag != '' || startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          TAG: ${{ needs.prepare.outputs.tag || github.ref_name }}
+        run: |
+          have="v$(node scripts/set-version.mjs --print)"
+          if [ "$have" != "$TAG" ]; then
+            echo "::error::Etiket $TAG ama kodun sürümü $have (node scripts/set-version.mjs ile eşitle)."; exit 1
+          fi
       - name: Install WebKitGTK
         if: matrix.platform == 'linux'
         run: |
@@ -120,22 +181,42 @@ jobs:
           targets: ${{ matrix.platform == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: Swatinem/rust-cache@v2
       - name: Build the app
-        run: pnpm tauri build ${{ matrix.args }}
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+        run: |
+          args=(${{ matrix.args }})
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            node scripts/updater-config.mjs "$RUNNER_TEMP/updater.json"
+            args+=(--config "$RUNNER_TEMP/updater.json")
+          else
+            echo "::notice::İmza anahtarı (TAURI_SIGNING_PRIVATE_KEY) yok: otomatik güncelleme dosyaları üretilmedi."
+          fi
+          pnpm tauri build "${args[@]}"
       - name: Build gamelib-cli
         run: cargo build --release --locked -p gamelib-cli
       - name: Collect files
         shell: bash
         run: |
           mkdir -p out
+          version=$(node scripts/set-version.mjs --print)
+          shopt -s nullglob
           case "${{ matrix.platform }}" in
             windows)
-              cp target/release/bundle/nsis/*-setup.exe out/
+              # The installer and, when signed, its update signature.
+              cp target/release/bundle/nsis/*-setup.exe* out/
               cp target/release/gamelib-cli.exe out/gamelib-cli-windows-x64.exe ;;
             macos)
               cp target/universal-apple-darwin/release/bundle/dmg/*.dmg out/
+              # The update bundle (GameLib.app.tar.gz) is named after the version, like the rest.
+              for f in target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz*; do
+                cp "$f" "out/$(basename "$f" | sed "s/\.app\.tar\.gz/_${version}_universal.app.tar.gz/")"
+              done
               cp target/release/gamelib-cli out/gamelib-cli-macos-arm64 ;;
             linux)
-              cp target/release/bundle/appimage/*.AppImage target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm out/
+              cp target/release/bundle/appimage/*.AppImage* target/release/bundle/deb/*.deb* target/release/bundle/rpm/*.rpm* out/
               cp target/release/gamelib-cli out/gamelib-cli-linux-x64 ;;
           esac
           ls -l out
@@ -148,17 +229,42 @@ jobs:
 
   release:
     name: GitHub release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, bundle]
+    needs: [check, check-windows, prepare, bundle]
+    # Only when every system built: a release without one of them would leave its users behind.
+    if: >-
+      !cancelled() && needs.bundle.result == 'success' &&
+      needs.check.result != 'failure' && needs.check-windows.result != 'failure' &&
+      (needs.prepare.outputs.tag != '' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      TAG: ${{ needs.prepare.outputs.tag || github.ref_name }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
+      - name: Updater manifest
+        run: |
+          if compgen -G "artifacts/*.sig" > /dev/null; then
+            node scripts/latest-json.mjs artifacts "$TAG" "$GITHUB_REPOSITORY" > artifacts/latest.json
+            cat artifacts/latest.json
+          else
+            echo "::warning::İmzalı dosya yok: latest.json eklenmedi; kurulu uygulamalar bu sürüme kendiliğinden geçmez."
+          fi
+      # Uploaded as a draft first, so installed copies never see a release with missing files.
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ env.TAG }}
+          name: GameLib ${{ env.TAG }}
           files: artifacts/*
           generate_release_notes: true
+          draft: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

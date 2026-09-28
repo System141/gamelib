@@ -456,3 +456,24 @@ export interface InstallChanged {
   store: Store;
   productId: string;
 }
+
+// --- app updates ------------------------------------------------------------------------------
+
+export interface UpdateInfo {
+  version: string;
+}
+
+export interface UpdateStatus {
+  /** Whether this build can update itself (it knows the releases' public key). */
+  configured: boolean;
+  currentVersion: string;
+  /** When GitHub was last asked (unix seconds), since the app started. */
+  checkedAt: number | null;
+  update: UpdateInfo | null;
+}
+
+/** `update:progress` payload. */
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
+}

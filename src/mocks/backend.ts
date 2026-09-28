@@ -32,6 +32,7 @@ import type {
   SyncFinished,
   SyncProgress,
   TagInfo,
+  UpdateStatus,
   WorkerKind,
 } from "../lib/types";
 
@@ -77,6 +78,9 @@ export class MockBackend {
   private live: DownloadProgress | null = null;
   private installs: Installed[] = [];
   private libraryPending = false;
+  /** `?mock=update`: a newer version is out. */
+  private fakeUpdate = new URLSearchParams(window.location.search).get("mock") === "update";
+  private updateCheckedAt: number | null = null;
   private installing: InstallProgress | null = null;
   private nextDownloadId = 1;
   /** The simulated transfer's timer, while one runs. */
@@ -197,6 +201,17 @@ export class MockBackend {
         return this.storeFiles(args.store, args.productId);
       case "enqueue_download":
         return this.enqueue(args.store, args.productId, args.optionId);
+      case "get_update_status":
+        return this.updateStatus();
+      case "check_update":
+        await sleep(500);
+        this.updateCheckedAt = Math.floor(Date.now() / 1000);
+        return this.updateStatus();
+      case "install_update":
+        return this.simulateUpdate();
+      case "open_release_page":
+        console.info(`[mock] ${cmd}`, args);
+        return null;
       case "get_downloads":
         return { items: this.downloads, live: this.live, installing: this.installing } satisfies DownloadList;
       case "approve_install":
@@ -532,6 +547,25 @@ export class MockBackend {
       };
       this.emit("download:progress", this.live);
     }, 250);
+  }
+
+  private updateStatus(): UpdateStatus {
+    const found = this.fakeUpdate && this.updateCheckedAt != null;
+    return { configured: true, currentVersion: "0.1.0", checkedAt: this.updateCheckedAt, update: found ? { version: "0.2.0" } : null };
+  }
+
+  /** Downloads a fake update with progress; "restarting" just reloads the preview. */
+  private async simulateUpdate(): Promise<null> {
+    if (!this.fakeUpdate || this.updateCheckedAt == null) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    if (this.installing) throw { kind: "invalid", message: "install_running" } satisfies CmdError;
+    const total = 9_400_000;
+    for (let i = 1; i <= 10; i += 1) {
+      await sleep(250);
+      this.emit("update:progress", { downloaded: (total * i) / 10, total });
+    }
+    await sleep(800);
+    window.location.reload();
+    return null;
   }
 
   // --- installs --------------------------------------------------------------------------------

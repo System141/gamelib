@@ -103,6 +103,25 @@ export const tr = {
     toastUninstalled: (title: string) => `${title} kaldırıldı`,
     toastTarget: "Başlatılacak dosya değiştirildi",
   },
+  update: {
+    title: "Güncellemeler",
+    version: (v: string) => `Sürüm ${v}`,
+    ready: (v: string) => `GameLib ${v} hazır.`,
+    notes: "Yenilikler",
+    install: "Şimdi güncelle",
+    later: "Sonra",
+    downloading: (v: string) => `GameLib ${v} indiriliyor…`,
+    restarting: "Güncelleme kuruluyor; GameLib yeniden açılacak…",
+    check: "Güncellemeleri denetle",
+    checking: "Denetleniyor…",
+    upToDate: (when: string) => `GameLib güncel (son denetim: ${when}).`,
+    notChecked: "Henüz yeni sürüm denetlenmedi.",
+    notConfigured:
+      "Bu kurulum kendini güncelleyemiyor: imzalı bir sürümle kurulmadı. Yeni sürümleri GitHub'daki yayınlar sayfasından indirebilirsin.",
+    auto: "Güncellemeleri kendiliğinden denetle",
+    autoHint: "Açılışta ve birkaç saatte bir yeni sürüm olup olmadığına bakılır. Güncelleme her zaman senin onayınla kurulur.",
+    releases: "Yayınlar sayfası",
+  },
   downloads: {
     title: "İndirmeler",
     subtitle: (running: number, waiting: number, done: number) =>
@@ -553,6 +572,8 @@ const INVALID_CODES: Record<string, string> = {
   unsupported_archive: "Bu arşiv biçimi ya da şifreli arşivler desteklenmiyor.",
   blocked: "Windows ya da antivirüs programı bu dosyayı engelledi.",
   launch_target: "Başlatılacak dosya bulunamadı; bir dosya seç.",
+  install_running: "Bir oyun kuruluyor; kurulum bitince güncelleyebilirsin.",
+  version: "Geçersiz sürüm numarası.",
   store: "Bu mağazada arama yapılamıyor.",
 };
 

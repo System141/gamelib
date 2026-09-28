@@ -1,6 +1,7 @@
 mod commands;
 mod error;
 mod login;
+mod updates;
 
 use std::sync::Arc;
 
@@ -20,6 +21,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::PendingUpdate::default())
         .setup(|app| {
             // Local (non-roaming) data dir: the catalog is ~150 MB and can always be re-downloaded.
             // `gamelib-cli` uses the same file by default (see crates/gamelib-cli/src/main.rs).
@@ -78,6 +81,10 @@ pub fn run() {
             commands::open_install_folder,
             commands::set_launch_target,
             commands::pick_launch_target,
+            updates::get_update_status,
+            updates::check_update,
+            updates::install_update,
+            updates::open_release_page,
             commands::list_sites,
             commands::list_links,
             commands::save_link,

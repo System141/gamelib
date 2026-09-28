@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use gamelib_core::app::account_page;
-use gamelib_core::app::{App, EventSink, steam_url};
+use gamelib_core::app::{App, EventSink, release_page, steam_url};
 use gamelib_core::model::{GameQuery, LinkInput, MatchState, OpenTarget, SettingsPatch, Store};
 use gamelib_core::{Error, ErrorInfo, ErrorKind, Result};
 use serde::Deserialize;
@@ -169,6 +169,11 @@ struct MatchStateArgs {
 }
 
 #[derive(Deserialize)]
+struct VersionArgs {
+    version: Option<String>,
+}
+
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProductArgs {
     store: Store,
@@ -293,6 +298,18 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         "get_store_files" => {
             let a: ProductArgs = parse(args)?;
             to_json(&app.store_files(a.store, &a.product_id)?)
+        }
+        // The preview server cannot update itself; the desktop app can.
+        "get_update_status" | "check_update" => json!({
+            "configured": false,
+            "currentVersion": env!("CARGO_PKG_VERSION"),
+            "checkedAt": null,
+            "update": null,
+        }),
+        "install_update" => return Err(desktop_only()),
+        "open_release_page" => {
+            let a: VersionArgs = parse(args)?;
+            json!({ "url": release_page(a.version.as_deref())? })
         }
         "get_downloads" => to_json(&app.downloads()?),
         "get_installs" => to_json(&app.installs()?),

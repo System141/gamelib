@@ -30,11 +30,20 @@ import type {
   SyncFinished,
   SyncProgress,
   TagInfo,
+  UpdateProgress,
+  UpdateStatus,
 } from "./types";
 
 /** Typed wrappers around the Rust commands (src-tauri/src/commands.rs; `gamelib-cli serve` in the browser preview). */
 export const api = {
   getStatus: () => invoke<AppStatus>("get_status"),
+  /** The version and what the last check found, without asking GitHub. */
+  getUpdateStatus: () => invoke<UpdateStatus>("get_update_status"),
+  checkUpdate: () => invoke<UpdateStatus>("check_update"),
+  /** Desktop only: downloads and installs the update found by the last check, then restarts. */
+  installUpdate: () => invoke<void>("install_update"),
+  /** A release's page on GitHub (what is new). */
+  openReleasePage: (version: string | null) => invoke<void>("open_release_page", { version }),
   startSync: (fresh = false) => invoke<void>("start_sync", { fresh }),
   fetchNewReleases: (days: number | null = null) => invoke<void>("fetch_new_releases", { days }),
   cancelSync: () => invoke<void>("cancel_sync"),
@@ -115,6 +124,12 @@ export function onDownloadProgress(cb: (p: DownloadProgress) => void): Promise<U
 
 export function onDownloadState(cb: (d: Download | DownloadRemoved) => void): Promise<UnlistenFn> {
   return listen<Download | DownloadRemoved>(EVENT_DOWNLOAD_STATE, (e) => cb(e.payload));
+}
+
+export const EVENT_UPDATE_PROGRESS = "update:progress";
+
+export function onUpdateProgress(cb: (p: UpdateProgress) => void): Promise<UnlistenFn> {
+  return listen<UpdateProgress>(EVENT_UPDATE_PROGRESS, (e) => cb(e.payload));
 }
 
 export const EVENT_INSTALL_PROGRESS = "install:progress";

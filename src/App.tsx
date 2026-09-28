@@ -10,8 +10,10 @@ import { LibraryView } from "./components/LibraryView";
 import { SettingsView } from "./components/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { ViewHeader } from "./components/ViewHeader";
-import { useStatus, useTags } from "./hooks/useData";
+import { useSettings, useStatus, useTags } from "./hooks/useData";
+import { useAutoUpdateCheck } from "./hooks/useUpdater";
 import { useFilters } from "./hooks/useFilters";
 import { useDownloadEvents } from "./hooks/useDownloadEvents";
 import { useSyncEvents } from "./hooks/useSyncEvents";
@@ -23,6 +25,8 @@ import type { AppStatus, WorkerKind } from "./lib/types";
 export function App() {
   useSyncEvents();
   useDownloadEvents();
+  const settings = useSettings();
+  useAutoUpdateCheck(settings.data?.autoUpdate ?? false);
   const qc = useQueryClient();
   const status = useStatus();
   const f = useFilters();
@@ -65,6 +69,7 @@ export function App() {
           onStoreSync={storeSync}
           onCancelSync={cancel}
         />
+        <UpdateBanner />
         <SyncBanner status={status.data} onResume={fullSync} onRefresh={fullSync} />
 
         <main className="flex min-h-0 flex-1 flex-col">
