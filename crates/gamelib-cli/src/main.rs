@@ -19,8 +19,8 @@ use gamelib_core::db::stores::matches_for_game;
 use gamelib_core::db::write::{get_meta, meta_keys};
 use gamelib_core::links::{SiteRegistry, resolve, validate};
 use gamelib_core::model::{
-    DeckFilter, GameDetail, GameMedia, GameQuery, Platform, SortKey, Store, SyncProgress, TagInfo,
-    WorkerKind,
+    DeckFilter, GameDetail, GameMedia, GameQuery, Platform, SortKey, Store, StoreMatch,
+    SyncProgress, TagInfo, WorkerKind,
 };
 use gamelib_core::new_releases::{NewReleasesOptions, fetch_new_releases};
 use gamelib_core::steam::SteamClient;
@@ -514,6 +514,8 @@ struct Fixture {
     games: Vec<GameDetail>,
     tags: Vec<TagInfo>,
     media: BTreeMap<u32, GameMedia>,
+    /// Store matches of the exported games, when stores were matched.
+    store_matches: BTreeMap<u32, Vec<StoreMatch>>,
 }
 
 fn cmd_export_fixture(db_path: &Path, mut args: Vec<String>) -> Result<()> {
@@ -598,11 +600,20 @@ fn cmd_export_fixture(db_path: &Path, mut args: Vec<String>) -> Result<()> {
         std::thread::sleep(Duration::from_millis(300));
     }
 
+    let mut store_matches = BTreeMap::new();
+    for g in &games {
+        let matches = matches_for_game(conn, g.card.appid)?;
+        if !matches.is_empty() {
+            store_matches.insert(g.card.appid, matches);
+        }
+    }
+
     let fixture = Fixture {
         generated_at: now,
         games,
         tags,
         media,
+        store_matches,
     };
     if let Some(dir) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| Error::Other(e.to_string()))?;

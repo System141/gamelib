@@ -14,6 +14,10 @@ export interface GameQuery {
   showAdult: boolean;
   releasedWithinDays: number | null;
   hasLinks: boolean;
+  /** Only games matched to a product in any of these stores. */
+  stores: Store[];
+  /** Only games matched to a store product the user owns. */
+  owned: boolean;
   sort: SortKey;
   offset: number;
   limit: number;
@@ -44,6 +48,8 @@ export interface GameCard {
   deck: DeckCompat;
   topTags: number[];
   linkCount: number;
+  /** Stores that sell this game (confident matches only). */
+  stores: Store[];
 }
 
 export interface GameDetail extends GameCard {
@@ -84,8 +90,9 @@ export interface GameMedia {
   screenshots: Screenshot[];
 }
 
-export type WorkerKind = "full" | "new_releases";
-export type SyncPhase = "starting" | "tags" | "featured" | "catalog" | "new_releases" | "finalizing";
+export type WorkerKind = "full" | "new_releases" | "stores";
+export type SyncPhase =
+  "starting" | "tags" | "featured" | "catalog" | "new_releases" | "gog_catalog" | "matching" | "gog_ids" | "finalizing";
 
 export interface SyncProgress {
   kind: WorkerKind;
@@ -135,12 +142,35 @@ export interface CmdError {
   message: string;
 }
 
+export interface StoresReport {
+  catalog: number;
+  inserted: number;
+  matchedGames: number;
+  checked: number;
+  remaining: number;
+  requests: number;
+  retries: number;
+  durationMs: number;
+  warnings: string[];
+}
+
 export interface SyncFinished {
   kind: WorkerKind;
   outcome: "completed" | "cancelled" | "failed";
   report: SyncReport | null;
   newReleases: NewReleasesReport | null;
+  stores: StoresReport | null;
   error: CmdError | null;
+}
+
+export interface StoreCounts {
+  /** Steam games with a GOG / itch.io match. */
+  gog: number;
+  itch: number;
+  owned: number;
+  /** GOG products known; 0 until stores were matched once. */
+  gogProducts: number;
+  lastStoreSyncAt: number | null;
 }
 
 export interface AppStatus {
@@ -150,6 +180,7 @@ export interface AppStatus {
   lastSyncAt: number | null;
   lastNewReleasesAt: number | null;
   resumable: boolean;
+  storeCounts: StoreCounts;
   worker: WorkerKind | null;
   progress: SyncProgress | null;
   dbPath: string;
@@ -225,4 +256,30 @@ export interface GameLink {
   lastCheck: LinkCheckSummary | null;
   createdAt: number;
   updatedAt: number;
+}
+
+// --- other stores ---------------------------------------------------------------------------
+
+export type Store = "gog" | "itch";
+export type MatchMethod = "gamesdb" | "title" | "manual";
+export type MatchState = "auto" | "confirmed" | "rejected";
+
+export interface StoreMatch {
+  store: Store;
+  productId: string;
+  title: string;
+  url: string | null;
+  cover: string | null;
+  coverWide: string | null;
+  price: string | null;
+  isFree: boolean;
+  owned: boolean;
+  win: boolean;
+  mac: boolean;
+  linux: boolean;
+  method: MatchMethod;
+  score: number;
+  state: MatchState;
+  /** Counts as a match; otherwise it is a suggestion to confirm. */
+  confident: boolean;
 }

@@ -4,7 +4,7 @@ import { memo } from "react";
 import { tr } from "../i18n/tr";
 import { formatRelative, formatYear, isRecent } from "../lib/format";
 import type { GameCard as Game } from "../lib/types";
-import { Pill, PlatformIcons, PriceTag, ReviewDot } from "./badges";
+import { Pill, PlatformIcons, PriceTag, ReviewDot, StorePill } from "./badges";
 import { GameArt } from "./GameArt";
 
 interface Props {
@@ -44,6 +44,14 @@ export const GameCard = memo(function GameCard({ game, tagName, onOpen, relative
           </div>
           {game.discountPct > 0 && <Pill className="bg-[#4c6b22] text-[#beee11] shadow-md shadow-black/40">-%{game.discountPct}</Pill>}
         </div>
+
+        {game.stores.length > 0 && (
+          <span className="absolute bottom-2 left-2 flex gap-1 transition-opacity group-hover:opacity-0">
+            {game.stores.map((s) => (
+              <StorePill key={s} store={s} className="shadow-md shadow-black/50" />
+            ))}
+          </span>
+        )}
 
         {game.linkCount > 0 && (
           <span

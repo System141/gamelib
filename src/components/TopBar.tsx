@@ -1,10 +1,21 @@
 import clsx from "clsx";
-import { ArrowUpDown, Check, ChevronDown, Database, LoaderCircle, RefreshCw, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import {
+  ArrowUpDown,
+  Check,
+  ChevronDown,
+  Database,
+  LoaderCircle,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Store,
+  X,
+} from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { tr } from "../i18n/tr";
-import { formatNumber } from "../lib/format";
 import type { AppStatus, SortKey } from "../lib/types";
-import type { FiltersState, View } from "../hooks/useFilters";
+import type { FiltersState } from "../hooks/useFilters";
 import { useDismiss } from "../hooks/useUtils";
 import { Logo } from "./icons";
 
@@ -16,28 +27,28 @@ interface Props {
   onOpenFilters: () => void;
   onFullSync: () => void;
   onNewReleases: () => void;
+  onStoreSync: () => void;
   onCancelSync: () => void;
 }
 
-export function TopBar({ f, status, catalogEmpty, onOpenFilters, onFullSync, onNewReleases, onCancelSync }: Props) {
+export function TopBar({ f, status, catalogEmpty, onOpenFilters, onFullSync, onNewReleases, onStoreSync, onCancelSync }: Props) {
   return (
-    <header className="glass relative z-30 flex h-16 shrink-0 items-center gap-4 border-b border-white/6 px-5">
-      <div className="flex shrink-0 items-center gap-2.5 pr-1">
-        <Logo size={30} />
-        <span className="hidden font-display text-lg font-semibold tracking-tight text-ink-50 xl:inline">
-          Game<span className="text-gradient">Lib</span>
-        </span>
-      </div>
-
+    <header className="glass relative z-20 flex h-16 shrink-0 items-center gap-4 border-b border-white/6 px-5">
       {catalogEmpty ? (
-        <div className="flex-1" />
-      ) : (
         <>
-          <ViewTabs view={f.view} onChange={f.setView} linked={status?.linkedGameCount ?? 0} />
-          <div className="flex min-w-[240px] flex-1 justify-center">
-            <SearchBox value={f.search} onChange={f.setSearch} />
+          {/* No sidebar yet on the first run, so the logo sits here. */}
+          <div className="flex shrink-0 items-center gap-2.5 pr-1">
+            <Logo size={30} />
+            <span className="font-display text-lg font-semibold tracking-tight text-ink-50">
+              Game<span className="text-gradient">Lib</span>
+            </span>
           </div>
+          <div className="flex-1" />
         </>
+      ) : (
+        <div className="flex min-w-[240px] flex-1 justify-center">
+          <SearchBox value={f.search} onChange={f.setSearch} />
+        </div>
       )}
 
       <div className="flex shrink-0 items-center gap-2">
@@ -65,39 +76,16 @@ export function TopBar({ f, status, catalogEmpty, onOpenFilters, onFullSync, onN
             </button>
           </>
         )}
-        <SyncButton status={status} onFullSync={onFullSync} onNewReleases={onNewReleases} onCancel={onCancelSync} />
+        <SyncButton
+          status={status}
+          catalogEmpty={catalogEmpty}
+          onFullSync={onFullSync}
+          onNewReleases={onNewReleases}
+          onStoreSync={onStoreSync}
+          onCancel={onCancelSync}
+        />
       </div>
     </header>
-  );
-}
-
-function ViewTabs({ view, onChange, linked }: { view: View; onChange: (v: View) => void; linked: number }) {
-  const tabs: { id: View; label: string; badge?: number }[] = [
-    { id: "all", label: tr.views.all },
-    { id: "new", label: tr.views.new },
-    { id: "links", label: tr.views.links, badge: linked || undefined },
-  ];
-  return (
-    <nav className="flex shrink-0 items-center gap-1 rounded-xl bg-white/4 p-1 ring-1 ring-white/6" aria-label="Görünüm">
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          onClick={() => onChange(t.id)}
-          aria-current={view === t.id ? "page" : undefined}
-          className={clsx(
-            "relative inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium whitespace-nowrap transition",
-            view === t.id ? "bg-ink-700 text-white shadow-sm shadow-black/40 ring-1 ring-white/10" : "text-ink-300 hover:text-ink-50",
-          )}
-        >
-          {t.id === "new" && <Sparkles size={13} className={view === t.id ? "text-violet" : undefined} />}
-          {t.label}
-          {t.badge != null && (
-            <span className="rounded-full bg-accent/20 px-1.5 text-[11px] font-semibold text-accent-soft">{formatNumber(t.badge)}</span>
-          )}
-        </button>
-      ))}
-    </nav>
   );
 }
 
@@ -209,13 +197,17 @@ function SortMenu({ value, searching, onChange }: { value: SortKey; searching: b
 
 function SyncButton({
   status,
+  catalogEmpty,
   onFullSync,
   onNewReleases,
+  onStoreSync,
   onCancel,
 }: {
   status: AppStatus | undefined;
+  catalogEmpty: boolean;
   onFullSync: () => void;
   onNewReleases: () => void;
+  onStoreSync: () => void;
   onCancel: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -232,8 +224,14 @@ function SyncButton({
           <span className="absolute inset-y-0 left-0 bg-accent/15 transition-[width] duration-500" style={{ width: `${pct}%` }} />
         )}
         <LoaderCircle size={15} className="relative animate-spin" />
-        <span className="relative font-medium whitespace-nowrap tabular-nums">
-          {status.worker === "new_releases" ? tr.views.new : pct != null ? `%${pct}` : tr.sync.phases[progress?.phase ?? "starting"]}
+        <span className="relative font-medium whitespace-nowrap tabular-nums" title={tr.sync.phases[progress?.phase ?? "starting"]}>
+          {status.worker === "new_releases"
+            ? tr.views.new
+            : status.worker === "stores"
+              ? `${tr.sync.storesWorker}${pct != null ? ` %${pct}` : ""}`
+              : pct != null
+                ? `%${pct}`
+                : tr.sync.phases[progress?.phase ?? "starting"]}
         </span>
         <button
           type="button"
@@ -284,6 +282,17 @@ function SyncButton({
               onFullSync();
             }}
           />
+          {!catalogEmpty && (
+            <MenuItem
+              icon={<Store size={17} className="text-gog" />}
+              title={tr.sync.storesSync}
+              hint={tr.sync.storesSyncHint(status?.storeCounts.lastStoreSyncAt ?? null)}
+              onClick={() => {
+                setOpen(false);
+                onStoreSync();
+              }}
+            />
+          )}
         </div>
       )}
     </div>

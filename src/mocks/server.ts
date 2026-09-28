@@ -47,7 +47,7 @@ async function call(cmd: string, args: Record<string, unknown>): Promise<unknown
     throw body && typeof body === "object" && "kind" in body ? body : ({ kind: "other", message: `HTTP ${res.status}` } satisfies CmdError);
   }
   // The desktop app opens these itself; in the browser the page does.
-  if (cmd === "open_link" || cmd === "open_in_steam") {
+  if (cmd === "open_link" || cmd === "open_in_steam" || cmd === "open_store_page") {
     openUrl((body as { url: string }).url);
     return null;
   }

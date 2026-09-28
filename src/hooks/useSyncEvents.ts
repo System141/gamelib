@@ -37,7 +37,7 @@ export function useSyncEvents() {
     keep(
       onSyncFinished((finished) => {
         qc.setQueryData<AppStatus>(["status"], (s) => (s ? { ...s, worker: null, progress: null } : s));
-        for (const key of ["games", "status", "tags", "game"]) {
+        for (const key of ["games", "status", "tags", "game", "stores"]) {
           void qc.invalidateQueries({ queryKey: [key] });
         }
         announce(finished);
@@ -66,6 +66,12 @@ function announce(f: SyncFinished) {
       title: tr.sync.toastFull(f.report.seen),
       description: f.report.inserted > 0 ? tr.sync.toastFullNew(f.report.inserted) : undefined,
     });
+  }
+  if (f.stores) {
+    const r = f.stores;
+    const description =
+      r.warnings.length > 0 ? tr.sync.toastStoresWarning : r.remaining > 0 ? tr.sync.toastStoresRemaining(r.remaining) : undefined;
+    showToast({ tone: "success", title: tr.sync.toastStores(r.matchedGames), description });
   }
   if (f.newReleases) {
     const r = f.newReleases;

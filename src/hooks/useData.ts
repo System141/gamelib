@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import type { GameLink, LinkInput, TagInfo } from "../lib/types";
+import type { GameLink, LinkInput, MatchState, StoreMatch, TagInfo } from "../lib/types";
 
 export function useStatus() {
   return useQuery({
@@ -79,5 +79,44 @@ export function useCheckLink() {
   return useMutation({
     mutationFn: (link: GameLink) => api.checkLink(link.id),
     onSuccess: (_, link) => void qc.invalidateQueries({ queryKey: ["links", link.appid] }),
+  });
+}
+
+// --- other stores ---------------------------------------------------------------------------
+
+export function useStoreMatches(appid: number | null) {
+  return useQuery({
+    queryKey: ["stores", appid],
+    queryFn: () => api.getStoreMatches(appid!),
+    enabled: appid != null,
+  });
+}
+
+/** Asks GOG's GamesDB about the game (Rust does this at most monthly) and stores the answer in
+ *  the matches cache. Failures stay quiet: the local matches are still shown. */
+export function useStoreLookup(appid: number | null) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["stores-lookup", appid],
+    queryFn: async () => {
+      const matches = await api.refreshStoreMatches(appid!);
+      qc.setQueryData(["stores", appid], matches);
+      return true;
+    },
+    enabled: appid != null,
+    retry: false,
+  });
+}
+
+export function useSetMatchState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ match, appid, state }: { match: StoreMatch; appid: number; state: MatchState }) =>
+      api.setMatchState(match.store, match.productId, appid, state),
+    onSuccess: (_, { appid }) => {
+      void qc.invalidateQueries({ queryKey: ["stores", appid] });
+      void qc.invalidateQueries({ queryKey: ["games"] });
+      void qc.invalidateQueries({ queryKey: ["status"] });
+    },
   });
 }

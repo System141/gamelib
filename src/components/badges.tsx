@@ -2,7 +2,7 @@ import clsx from "clsx";
 import type { ReactNode } from "react";
 import { deckLabel, reviewLabel, tr } from "../i18n/tr";
 import { formatPercent, reviewTone, type ReviewTone } from "../lib/format";
-import type { DeckCompat, GameCard } from "../lib/types";
+import type { DeckCompat, GameCard, Store } from "../lib/types";
 import { AppleIcon, LinuxIcon, SteamIcon, WindowsIcon } from "./icons";
 
 const TONE_TEXT: Record<ReviewTone, string> = {
@@ -147,6 +147,40 @@ export function Pill({ children, className }: { children: ReactNode; className?:
   return (
     <span className={clsx("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide", className)}>
       {children}
+    </span>
+  );
+}
+
+const STORE_STYLE: Record<Store, { letter: string; className: string }> = {
+  gog: { letter: "G", className: "bg-gog/15 text-gog ring-gog/35" },
+  itch: { letter: "i", className: "bg-itch/15 text-itch ring-itch/35" },
+};
+
+/** Small square store mark (the stores' own logos are trademarks, so a lettermark stands in). */
+export function StoreMark({ store, size = 20, className }: { store: Store; size?: number; className?: string }) {
+  const style = STORE_STYLE[store];
+  return (
+    <span
+      className={clsx("inline-grid shrink-0 place-items-center rounded-md font-display font-bold ring-1", style.className, className)}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.58) }}
+      aria-hidden
+    >
+      {style.letter}
+    </span>
+  );
+}
+
+/** Store name pill used on cards and in the detail view. */
+export function StorePill({ store, className }: { store: Store; className?: string }) {
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wide uppercase ring-1 backdrop-blur",
+        store === "gog" ? "bg-ink-950/80 text-gog ring-gog/40" : "bg-ink-950/80 text-itch ring-itch/40",
+        className,
+      )}
+    >
+      {tr.storeNames[store]}
     </span>
   );
 }

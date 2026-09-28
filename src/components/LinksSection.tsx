@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { CircleCheck, CircleX, ExternalLink, Globe, Link2, LoaderCircle, Pencil, Plus, Radar, ShieldAlert, Trash } from "lucide-react";
-import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
 import { fileKind, formatBytes, formatRelative } from "../lib/format";
@@ -10,6 +10,7 @@ import { showToast } from "../lib/toast";
 import type { GameLink, LinkKind, Platform, SiteInfo } from "../lib/types";
 import { useCheckLink, useDeleteLink, useLinks, useSaveLink, useSites } from "../hooks/useData";
 import { AppleIcon, LinuxIcon, WindowsIcon } from "./icons";
+import { SmallButton } from "./ui";
 
 export function LinksSection({ appid }: { appid: number }) {
   const links = useLinks(appid);
@@ -187,37 +188,6 @@ function LinkRow({ link, site, onEdit }: { link: GameLink; site: SiteInfo | unde
         )}
       </div>
     </div>
-  );
-}
-
-function SmallButton({
-  children,
-  onClick,
-  icon,
-  tone = "default",
-  disabled,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-  icon?: ReactNode;
-  tone?: "default" | "primary" | "danger";
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={clsx(
-        "inline-flex h-7.5 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium ring-1 transition disabled:opacity-60",
-        tone === "primary" && "bg-accent/15 text-accent-soft ring-accent/35 hover:bg-accent/25",
-        tone === "danger" && "bg-danger/15 text-danger ring-danger/35 hover:bg-danger/25",
-        tone === "default" && "bg-white/4 text-ink-200 ring-white/8 hover:bg-white/8 hover:text-white",
-      )}
-    >
-      {icon}
-      {children}
-    </button>
   );
 }
 

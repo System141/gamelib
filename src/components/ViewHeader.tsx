@@ -1,8 +1,9 @@
 import clsx from "clsx";
-import { LoaderCircle, Sparkles, X } from "lucide-react";
+import { LoaderCircle, Sparkles, Store as StoreIcon, X } from "lucide-react";
 import { deckLabel, tr } from "../i18n/tr";
 import type { AppStatus } from "../lib/types";
 import type { FiltersState, NewDays } from "../hooks/useFilters";
+import { StoreMark } from "./badges";
 
 interface Props {
   f: FiltersState;
@@ -10,11 +11,12 @@ interface Props {
   status: AppStatus | undefined;
   tagName: (tagid: number) => string | undefined;
   onNewReleases: () => void;
+  onStoreSync: () => void;
 }
 
 const PERIODS: NewDays[] = [7, 30, 90];
 
-export function ViewHeader({ f, total, status, tagName, onNewReleases }: Props) {
+export function ViewHeader({ f, total, status, tagName, onNewReleases, onStoreSync }: Props) {
   const filtered = f.searching || f.activeCount > 0;
   const count = total == null ? "" : filtered ? tr.count.results(total) : tr.count.games(total);
   const busy = status?.worker === "new_releases";
@@ -51,7 +53,42 @@ export function ViewHeader({ f, total, status, tagName, onNewReleases }: Props) 
               </p>
             </>
           )}
+          {(f.view === "gog" || f.view === "itch") && (
+            <>
+              <h1 className="flex items-center gap-2.5 font-display text-[28px] leading-tight font-semibold tracking-tight text-ink-50">
+                <StoreMark store={f.view} size={26} />
+                {tr.views[f.view]}
+              </h1>
+              <p className="mt-1 h-5 text-sm text-ink-400 tabular-nums">
+                {total == null
+                  ? ""
+                  : filtered
+                    ? tr.count.results(total)
+                    : f.view === "gog"
+                      ? tr.stores.gogView.subtitle(total)
+                      : tr.stores.itchView.subtitle(total)}
+                {f.view === "gog" && status?.storeCounts.lastStoreSyncAt != null && (
+                  <>
+                    <span className="text-ink-600"> · </span>
+                    {tr.stores.gogView.lastSync(status.storeCounts.lastStoreSyncAt)}
+                  </>
+                )}
+              </p>
+            </>
+          )}
         </div>
+
+        {f.view === "gog" && (status?.storeCounts.gogProducts ?? 0) > 0 && (
+          <button
+            type="button"
+            onClick={onStoreSync}
+            disabled={status?.worker != null}
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-gog/12 px-3.5 text-sm font-semibold text-gog ring-1 ring-gog/35 transition hover:bg-gog/20 disabled:opacity-60"
+          >
+            {status?.worker === "stores" ? <LoaderCircle size={15} className="animate-spin" /> : <StoreIcon size={15} />}
+            {tr.sync.storesSync}
+          </button>
+        )}
 
         {f.view === "new" && (
           <div className="flex items-center gap-3">

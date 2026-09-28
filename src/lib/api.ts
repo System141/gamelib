@@ -10,7 +10,10 @@ import type {
   GameQuery,
   LinkCheck,
   LinkInput,
+  MatchState,
   SiteInfo,
+  Store,
+  StoreMatch,
   SyncFinished,
   SyncProgress,
   TagInfo,
@@ -26,13 +29,19 @@ export const api = {
   getGame: (appid: number) => invoke<GameDetail | null>("get_game", { appid }),
   listTags: () => invoke<TagInfo[]>("list_tags"),
   getGameMedia: (appid: number) => invoke<GameMedia>("get_game_media", { appid }),
+  startStoreSync: () => invoke<void>("start_store_sync"),
+  getStoreMatches: (appid: number) => invoke<StoreMatch[]>("get_store_matches", { appid }),
+  refreshStoreMatches: (appid: number) => invoke<StoreMatch[]>("refresh_store_matches", { appid }),
+  setMatchState: (store: Store, productId: string, appid: number, state: MatchState) =>
+    invoke<void>("set_match_state", { store, productId, appid, state }),
+  openStorePage: (store: Store, productId: string) => invoke<void>("open_store_page", { store, productId }),
   listSites: () => invoke<SiteInfo[]>("list_sites"),
   listLinks: (appid: number) => invoke<GameLink[]>("list_links", { appid }),
   saveLink: (input: LinkInput) => invoke<GameLink>("save_link", { input }),
   deleteLink: (id: number) => invoke<boolean>("delete_link", { id }),
   checkLink: (id: number) => invoke<LinkCheck>("check_link", { id }),
   openLink: (id: number) => invoke<void>("open_link", { id }),
-  openInSteam: (appid: number, target: "web" | "client") => invoke<void>("open_in_steam", { appid, target }),
+  openInSteam: (appid: number, target: "web" | "client" | "install") => invoke<void>("open_in_steam", { appid, target }),
 };
 
 export const EVENT_PROGRESS = "sync:progress";

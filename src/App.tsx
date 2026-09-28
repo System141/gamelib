@@ -5,6 +5,7 @@ import { FilterSheet } from "./components/FilterSheet";
 import { FirstRun } from "./components/FirstRun";
 import { GameDetailDialog } from "./components/GameDetailDialog";
 import { GameGrid } from "./components/GameGrid";
+import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { ViewHeader } from "./components/ViewHeader";
 import { useStatus, useTags } from "./hooks/useData";
@@ -38,48 +39,56 @@ export function App() {
   };
   const fullSync = () => start("full", () => api.startSync(false));
   const newReleases = () => start("new_releases", () => api.fetchNewReleases());
+  const storeSync = () => start("stores", () => api.startStoreSync());
   const cancel = () => void api.cancelSync();
 
   const empty = status.data?.gameCount === 0;
+  const storesSynced = (status.data?.storeCounts.gogProducts ?? 0) > 0;
 
   return (
-    <div className="app-backdrop flex h-full flex-col">
-      <TopBar
-        f={f}
-        status={status.data}
-        catalogEmpty={empty}
-        onOpenFilters={() => setFiltersOpen(true)}
-        onFullSync={fullSync}
-        onNewReleases={newReleases}
-        onCancelSync={cancel}
-      />
-      <SyncBanner status={status.data} onResume={fullSync} onRefresh={fullSync} />
+    <div className="app-backdrop flex h-full">
+      {!status.isLoading && !empty && <Sidebar view={f.view} onChange={f.setView} status={status.data} />}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar
+          f={f}
+          status={status.data}
+          catalogEmpty={empty}
+          onOpenFilters={() => setFiltersOpen(true)}
+          onFullSync={fullSync}
+          onNewReleases={newReleases}
+          onStoreSync={storeSync}
+          onCancelSync={cancel}
+        />
+        <SyncBanner status={status.data} onResume={fullSync} onRefresh={fullSync} />
 
-      <main className="flex min-h-0 flex-1 flex-col">
-        {status.isLoading ? null : empty ? (
-          <FirstRun status={status.data} onFullSync={fullSync} onNewReleases={newReleases} onCancel={cancel} />
-        ) : (
-          <>
-            <ViewHeader f={f} total={total} status={status.data} tagName={tagName} onNewReleases={newReleases} />
-            <div className="min-h-0 flex-1">
-              <GameGrid
-                query={f.query}
-                tagName={tagName}
-                onOpen={openGame}
-                relativeDates={f.view === "new"}
-                onTotal={setTotal}
-                empty={
-                  <EmptyState
-                    view={f.view}
-                    canClear={f.activeCount > 0 || f.search.length > 0}
-                    onClear={() => (f.clear(), f.setSearch(""))}
-                  />
-                }
-              />
-            </div>
-          </>
-        )}
-      </main>
+        <main className="flex min-h-0 flex-1 flex-col">
+          {status.isLoading ? null : empty ? (
+            <FirstRun status={status.data} onFullSync={fullSync} onNewReleases={newReleases} onCancel={cancel} />
+          ) : (
+            <>
+              <ViewHeader f={f} total={total} status={status.data} tagName={tagName} onNewReleases={newReleases} onStoreSync={storeSync} />
+              <div className="min-h-0 flex-1">
+                <GameGrid
+                  query={f.query}
+                  tagName={tagName}
+                  onOpen={openGame}
+                  relativeDates={f.view === "new"}
+                  onTotal={setTotal}
+                  empty={
+                    <EmptyState
+                      view={f.view}
+                      canClear={f.activeCount > 0 || f.search.length > 0}
+                      onClear={() => (f.clear(), f.setSearch(""))}
+                      storesSynced={storesSynced}
+                      onStoreSync={storeSync}
+                    />
+                  }
+                />
+              </div>
+            </>
+          )}
+        </main>
+      </div>
 
       <FilterSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} f={f} tags={tags} />
       <GameDetailDialog
@@ -91,6 +100,7 @@ export function App() {
           setSelected(null);
         }}
         showAdult={f.showAdult}
+        onStoreSync={storeSync}
       />
       <Toasts />
     </div>

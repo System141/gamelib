@@ -4,7 +4,10 @@ import { useCallback, useMemo, useState } from "react";
 import type { DeckFilter, GameQuery, Platform, SortKey } from "../lib/types";
 import { useDebounced, usePersistentState } from "./useUtils";
 
-export type View = "all" | "new" | "links";
+/** Views that list Steam games in the grid. */
+export type View = "all" | "new" | "links" | "gog" | "itch";
+
+export const VIEWS: readonly View[] = ["all", "new", "links", "gog", "itch"];
 export type NewDays = 7 | 30 | 90;
 
 export interface Filters {
@@ -29,7 +32,8 @@ export const EMPTY_FILTERS: Filters = {
 export type BaseQuery = Omit<GameQuery, "offset" | "limit">;
 
 export function useFilters() {
-  const [view, setViewRaw] = usePersistentState<View>("gamelib.view", "all");
+  const [storedView, setViewRaw] = usePersistentState<View>("gamelib.view", "all");
+  const view: View = VIEWS.includes(storedView) ? storedView : "all";
   const [chosenSort, setChosenSort] = usePersistentState<SortKey | null>("gamelib.sort", null);
   const [showAdult, setShowAdult] = usePersistentState<boolean>("gamelib.showAdult", false);
   const [newDays, setNewDays] = usePersistentState<NewDays>("gamelib.newDays", 30);
@@ -53,6 +57,8 @@ export function useFilters() {
       showAdult,
       releasedWithinDays: view === "new" ? newDays : null,
       hasLinks: view === "links" || filters.hasLinks,
+      stores: view === "gog" || view === "itch" ? [view] : [],
+      owned: false,
       sort,
     }),
     [debouncedSearch, filters, showAdult, view, newDays, sort],

@@ -15,7 +15,10 @@ import type {
   GameQuery,
   LinkCheck,
   LinkInput,
+  MatchState,
   SiteInfo,
+  Store,
+  StoreMatch,
   SyncFinished,
   SyncProgress,
   TagInfo,
@@ -27,7 +30,12 @@ export interface Fixture {
   games: GameDetail[];
   tags: TagInfo[];
   media: Record<string, GameMedia>;
+  /** Store matches of fixture games, by appid (exported after a store sync). */
+  storeMatches?: Record<string, StoreMatch[]>;
 }
+
+/** Matches count when confirmed, or automatic with this score. Mirrors matching::CONFIDENT. */
+const CONFIDENT = 0.85;
 
 type Emit = (event: string, payload: unknown) => void;
 
@@ -46,6 +54,10 @@ export class MockBackend {
   private worker: WorkerKind | null = null;
   private progress: SyncProgress | null = null;
   private cancelled = false;
+  /** Every store match the fixture knows; `matches` holds the ones "found" so far. */
+  private allMatches = new Map<number, StoreMatch[]>();
+  private matches = new Map<number, StoreMatch[]>();
+  private lastStoreSyncAt: number | null = null;
 
   constructor(
     private fixture: Fixture,
@@ -70,6 +82,14 @@ export class MockBackend {
       for (const g of this.all) if (!this.held.includes(g.appid)) this.present.add(g.appid);
     }
     this.lastSyncAt = empty ? null : nowSeconds() - 2 * 86_400;
+
+    for (const [appid, list] of Object.entries(fixture.storeMatches ?? synthesizeMatches(this.all))) {
+      this.allMatches.set(Number(appid), list);
+    }
+    if (!empty) {
+      this.matches = new Map([...this.allMatches].map(([k, v]) => [k, v.map((m) => ({ ...m }))]));
+      this.lastStoreSyncAt = nowSeconds() - 86_400;
+    }
   }
 
   async handle(cmd: string, args: Record<string, any>): Promise<unknown> {
@@ -93,6 +113,18 @@ export class MockBackend {
       case "get_game_media":
         await sleep(350);
         return this.fixture.media[String(args.appid)] ?? { descriptionTr: null, screenshots: [] };
+      case "start_store_sync":
+        return this.startWorker("stores");
+      case "get_store_matches":
+        return this.storeMatches(args.appid);
+      case "refresh_store_matches":
+        await sleep(700);
+        return this.storeMatches(args.appid);
+      case "set_match_state":
+        return this.setMatchState(args.store, args.productId, args.appid, args.state);
+      case "open_store_page":
+        console.info(`[mock] ${cmd}`, args);
+        return null;
       case "list_sites":
         return SITES;
       case "list_links":
@@ -119,7 +151,27 @@ export class MockBackend {
 
   private find(appid: number): GameDetail {
     const g = this.all.find((x) => x.appid === appid)!;
-    return { ...g, linkCount: this.links.filter((l) => l.appid === appid).length };
+    return { ...g, linkCount: this.links.filter((l) => l.appid === appid).length, stores: this.storesOf(appid) };
+  }
+
+  /** Stores with a confident match for a game. */
+  private storesOf(appid: number): Store[] {
+    const stores = new Set((this.matches.get(appid) ?? []).filter(isConfident).map((m) => m.store));
+    return (["gog", "itch"] as Store[]).filter((s) => stores.has(s));
+  }
+
+  private storeMatches(appid: number): StoreMatch[] {
+    return (this.matches.get(appid) ?? [])
+      .filter((m) => m.state !== "rejected")
+      .map((m) => ({ ...m, confident: isConfident(m) }))
+      .sort((a, b) => a.store.localeCompare(b.store) || Number(b.confident) - Number(a.confident) || b.score - a.score);
+  }
+
+  private setMatchState(store: Store, productId: string, appid: number, state: MatchState): null {
+    const match = (this.matches.get(appid) ?? []).find((m) => m.store === store && m.productId === productId);
+    if (!match) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    match.state = state;
+    return null;
   }
 
   private visible(): GameDetail[] {
@@ -135,6 +187,13 @@ export class MockBackend {
       lastSyncAt: this.lastSyncAt,
       lastNewReleasesAt: this.lastNewReleasesAt,
       resumable: false,
+      storeCounts: {
+        gog: visible.filter((g) => g.stores.includes("gog")).length,
+        itch: visible.filter((g) => g.stores.includes("itch")).length,
+        owned: 0,
+        gogProducts: this.lastStoreSyncAt == null ? 0 : 8204,
+        lastStoreSyncAt: this.lastStoreSyncAt,
+      },
       worker: this.worker,
       progress: this.progress,
       dbPath: "(tarayıcı önizlemesi)",
@@ -169,6 +228,7 @@ export class MockBackend {
       if (q.minReviewScore && g.reviewScore < q.minReviewScore) return false;
       if (q.releasedWithinDays && (g.releaseDate ?? 0) < now - q.releasedWithinDays * 86_400) return false;
       if (q.hasLinks && g.linkCount === 0) return false;
+      if (q.stores.length && !q.stores.some((s) => g.stores.includes(s))) return false;
       if (q.sort === "oldest" && g.releaseDate == null) return false;
       return true;
     });
@@ -195,7 +255,7 @@ export class MockBackend {
     if (this.worker) throw { kind: "busy", message: "busy" } satisfies CmdError;
     this.worker = kind;
     this.cancelled = false;
-    void (kind === "full" ? this.simulateFull() : this.simulateNewReleases());
+    void (kind === "full" ? this.simulateFull() : kind === "stores" ? this.simulateStores() : this.simulateNewReleases());
     return null;
   }
 
@@ -226,7 +286,7 @@ export class MockBackend {
     for (let i = 1; i <= steps; i += 1) {
       await sleep(260);
       if (this.cancelled) {
-        this.finish({ kind: "full", outcome: "cancelled", report: null, newReleases: null, error: null });
+        this.finish({ kind: "full", outcome: "cancelled", report: null, newReleases: null, stores: null, error: null });
         return;
       }
       byPopularity.slice(0, Math.round((byPopularity.length * i) / steps)).forEach((g) => this.present.add(g.appid));
@@ -260,6 +320,7 @@ export class MockBackend {
         warnings: [],
       },
       newReleases: null,
+      stores: null,
       error: null,
     });
   }
@@ -293,6 +354,54 @@ export class MockBackend {
         requests: 1,
         retries: 0,
         durationMs: 1500,
+      },
+      stores: null,
+      error: null,
+    });
+  }
+
+  private async simulateStores() {
+    const startedAt = nowSeconds();
+    const base = { kind: "stores" as const, startedAt, resumed: false, page: 0, pages: 0 };
+    const catalog = 8204;
+    for (let i = 1; i <= 8; i += 1) {
+      await sleep(220);
+      if (this.cancelled) {
+        this.finish({ kind: "stores", outcome: "cancelled", report: null, newReleases: null, stores: null, error: null });
+        return;
+      }
+      this.report({ ...base, phase: "gog_catalog", fetched: Math.round((catalog * i) / 8), total: catalog });
+    }
+    this.report({ ...base, phase: "matching", fetched: 6458, total: 6458 });
+    await sleep(400);
+    for (const [appid, list] of this.allMatches) {
+      if (!this.matches.has(appid))
+        this.matches.set(
+          appid,
+          list.map((m) => ({ ...m })),
+        );
+    }
+    for (let i = 1; i <= 5; i += 1) {
+      await sleep(250);
+      this.report({ ...base, phase: "gog_ids", fetched: i * 20, total: 100 });
+    }
+    this.lastStoreSyncAt = nowSeconds();
+    const matchedGames = [...this.matches.keys()].filter((id) => this.storesOf(id).includes("gog")).length;
+    this.finish({
+      kind: "stores",
+      outcome: "completed",
+      report: null,
+      newReleases: null,
+      stores: {
+        catalog,
+        inserted: 0,
+        matchedGames,
+        checked: 100,
+        remaining: 0,
+        requests: 183,
+        retries: 0,
+        durationMs: 3600,
+        warnings: [],
       },
       error: null,
     });
@@ -387,4 +496,38 @@ function rating(g: GameCard): number {
   if (g.reviewCount === 0) return 0;
   const avg = g.reviewPct / 100;
   return avg - (avg - 0.5) * 2 ** -Math.log10(g.reviewCount + 1);
+}
+
+function isConfident(m: StoreMatch): boolean {
+  return m.state === "confirmed" || (m.state === "auto" && m.score >= CONFIDENT);
+}
+
+/** Plausible GOG matches for fixtures exported before store matching existed. */
+function synthesizeMatches(games: GameDetail[]): Record<string, StoreMatch[]> {
+  const out: Record<string, StoreMatch[]> = {};
+  const popular = [...games].sort((a, b) => b.reviewCount - a.reviewCount);
+  popular.forEach((g, i) => {
+    if (i % 3 !== 0) return;
+    out[String(g.appid)] = [
+      {
+        store: "gog",
+        productId: String(1_100_000_000 + g.appid),
+        title: g.name,
+        url: `https://www.gog.com/en/game/${normalizeName(g.name).replace(/ /g, "_")}`,
+        cover: null,
+        coverWide: g.header,
+        price: g.isFree ? null : (g.price ?? "$19.99"),
+        isFree: g.isFree,
+        owned: false,
+        win: g.win,
+        mac: g.mac,
+        linux: g.linux,
+        method: i % 2 === 0 ? "title" : "gamesdb",
+        score: i % 9 === 0 ? 0.7 : 1,
+        state: "auto",
+        confident: i % 9 !== 0,
+      },
+    ];
+  });
+  return out;
 }

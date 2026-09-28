@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, ExternalLink, ImageOff, TriangleAlert, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, ExternalLink, ImageOff, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
@@ -11,6 +11,7 @@ import { DeckBadge, PlatformIcons, PriceTag, ReviewBadge } from "./badges";
 import { GameArt } from "./GameArt";
 import { SteamIcon } from "./icons";
 import { LinksSection } from "./LinksSection";
+import { StoresSection } from "./StoresSection";
 
 /** Descriptors whose "mature" screenshots stay hidden unless adult content is enabled. */
 const SEXUAL_DESCRIPTORS = [1, 3, 4];
@@ -21,9 +22,10 @@ interface Props {
   tagName: (tagid: number) => string | undefined;
   onTagClick: (tagid: number) => void;
   showAdult: boolean;
+  onStoreSync: () => void;
 }
 
-export function GameDetailDialog({ appid, onClose, tagName, onTagClick, showAdult }: Props) {
+export function GameDetailDialog({ appid, onClose, tagName, onTagClick, showAdult, onStoreSync }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const game = useGame(appid);
   const [viewer, setViewer] = useState<number | null>(null);
@@ -62,7 +64,15 @@ export function GameDetailDialog({ appid, onClose, tagName, onTagClick, showAdul
       </button>
       <div data-scroll className="relative h-full overflow-y-auto">
         {game.data ? (
-          <Detail game={game.data} tagName={tagName} onTagClick={onTagClick} showAdult={showAdult} viewer={viewer} setViewer={setViewer} />
+          <Detail
+            game={game.data}
+            tagName={tagName}
+            onTagClick={onTagClick}
+            showAdult={showAdult}
+            viewer={viewer}
+            setViewer={setViewer}
+            onStoreSync={onStoreSync}
+          />
         ) : game.isError ? (
           <div className="grid h-full place-items-center text-ink-300">{tr.detail.loadError}</div>
         ) : (
@@ -80,6 +90,7 @@ function Detail({
   showAdult,
   viewer,
   setViewer,
+  onStoreSync,
 }: {
   game: GameDetail;
   tagName: (tagid: number) => string | undefined;
@@ -87,6 +98,7 @@ function Detail({
   showAdult: boolean;
   viewer: number | null;
   setViewer: (i: number | null) => void;
+  onStoreSync: () => void;
 }) {
   const media = useGameMedia(game.appid);
   const allowMature = showAdult || !game.descriptors.some((d) => SEXUAL_DESCRIPTORS.includes(d));
@@ -95,7 +107,7 @@ function Detail({
   const englishOnly = media.isSuccess && !media.data?.descriptionTr && !!game.shortDescription;
   const backdrop = game.hero ?? game.header ?? game.capsule;
 
-  const openSteam = (target: "web" | "client") =>
+  const openSteam = (target: "web" | "client" | "install") =>
     api.openInSteam(game.appid, target).catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
 
   return (
@@ -164,6 +176,15 @@ function Detail({
               <SteamIcon size={16} />
               {tr.detail.openInClient}
             </button>
+            <button
+              type="button"
+              onClick={() => openSteam("install")}
+              title={tr.detail.installWithSteamHint}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-white/6 px-4 text-sm font-medium text-ink-100 ring-1 ring-white/10 transition hover:bg-white/10"
+            >
+              <Download size={16} />
+              {tr.detail.installWithSteam}
+            </button>
           </div>
         </div>
       </div>
@@ -191,6 +212,8 @@ function Detail({
             <h3 className="mb-3 font-display text-lg font-semibold text-ink-50">{tr.detail.screenshots}</h3>
             <Screenshots shots={shots} loading={media.isLoading} failed={media.isError} onOpen={setViewer} />
           </section>
+
+          <StoresSection appid={game.appid} onStoreSync={onStoreSync} />
 
           <LinksSection appid={game.appid} />
         </div>

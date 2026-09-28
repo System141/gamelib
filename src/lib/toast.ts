@@ -9,6 +9,8 @@ export interface Toast {
   tone: ToastTone;
   title: string;
   description?: string;
+  /** A button in the toast, e.g. "Geri al". */
+  action?: { label: string; onClick: () => void };
 }
 
 let toasts: Toast[] = [];

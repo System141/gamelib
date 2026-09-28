@@ -1,7 +1,7 @@
 // All user-facing text. Game data (names, English descriptions) comes from Steam as-is.
 
 import { formatNumber, formatRelative } from "../lib/format";
-import type { CheckStatus, CmdError, DeckCompat, SortKey, SyncPhase } from "../lib/types";
+import type { CheckStatus, CmdError, DeckCompat, MatchMethod, SortKey, Store, SyncPhase } from "../lib/types";
 
 const n = formatNumber;
 
@@ -14,7 +14,18 @@ export const tr = {
     all: "Tüm Oyunlar",
     new: "Yeni Çıkanlar",
     links: "Bağlantılarım",
+    gog: "GOG'da olanlar",
+    itch: "itch.io'da olanlar",
   },
+  nav: {
+    label: "Bölümler",
+    discover: "Keşfet",
+    stores: "Mağazalar",
+  },
+  storeNames: {
+    gog: "GOG",
+    itch: "itch.io",
+  } satisfies Record<Store, string>,
   search: {
     placeholder: "Oyun ara…",
     clear: "Aramayı temizle",
@@ -77,6 +88,8 @@ export const tr = {
     close: "Kapat",
     openInSteam: "Steam'de Aç",
     openInClient: "Steam uygulamasında aç",
+    installWithSteam: "Steam ile kur",
+    installWithSteamHint: "Oyun Steam kütüphanendeyse Steam'in kurulum penceresini açar.",
     about: "Hakkında",
     englishDescription: "Türkçe açıklama yok; Steam'deki İngilizce metin gösteriliyor.",
     noDescription: "Bu oyun için kısa açıklama bulunmuyor.",
@@ -151,6 +164,46 @@ export const tr = {
     toastSaved: "Bağlantı kaydedildi",
     toastDeleted: "Bağlantı silindi",
   },
+  stores: {
+    title: "Mağazalar",
+    hint: "Bu oyunun başka mağazalardaki karşılıkları otomatik bulunur. Yanlış bir eşleşmeyi buradan kaldırabilirsin.",
+    checking: "GOG kontrol ediliyor…",
+    none: "Başka bir mağazada bulunamadı.",
+    notSynced: "Mağazalar henüz eşleştirilmedi.",
+    syncCta: "Mağazaları eşleştir",
+    openIn: { gog: "GOG'da aç", itch: "itch.io'da aç" } satisfies Record<Store, string>,
+    owned: "Sahipsin",
+    free: "Ücretsiz",
+    method: {
+      gamesdb: "GOG kimliğiyle doğrulandı",
+      title: "Ada göre eşleşti",
+      manual: "Elle eşleştirildi",
+    } satisfies Record<MatchMethod, string>,
+    confirmed: "Onaylandı",
+    askCorrect: "Doğru mu?",
+    yes: "Evet",
+    no: "Hayır",
+    wrong: "Yanlış eşleşme",
+    suggestions: (count: number) => `Olası eşleşmeler (${count})`,
+    suggestionsHint: "Aynı adda birden fazla oyun var ya da bilgiler tam örtüşmüyor. Doğru olanı onayla.",
+    thisOne: "Bu oyun",
+    notThis: "Değil",
+    toastRejected: "Eşleşme kaldırıldı",
+    toastConfirmed: "Eşleşme onaylandı",
+    undo: "Geri al",
+    gogView: {
+      subtitle: (count: number) => `GOG.com'da da satılan ${n(count)} oyun`,
+      lastSync: (at: number) => `son eşleştirme ${formatRelative(at)}`,
+      neverTitle: "Mağazalar henüz eşleştirilmedi",
+      neverText:
+        "GOG kataloğu indirilip Steam oyunlarıyla eşleştirilir. İlk eşleştirme birkaç dakika sürer; GOG kimlik doğrulaması arka planda devam eder.",
+    },
+    itchView: {
+      subtitle: (count: number) => `itch.io'da da bulunan ${n(count)} oyun`,
+      emptyTitle: "itch.io eşleşmesi yok",
+      emptyText: "itch.io'daki oyunlar, hesabını bağladığında kütüphanenden ya da bir oyunun detayından eşleştirilir.",
+    },
+  },
   checkStatus: {
     ok: "Çalışıyor",
     broken: "Bozuk",
@@ -184,6 +237,8 @@ export const tr = {
     newReleasesHint: (at: number | null) => (at ? `Son kontrol: ${formatRelative(at)}` : "Henüz kontrol edilmedi"),
     fullSync: "Tüm kataloğu güncelle",
     fullSyncHint: (at: number | null) => (at ? `Son tam güncelleme: ${formatRelative(at)}` : "Henüz tam güncelleme yapılmadı"),
+    storesSync: "Mağazaları eşleştir",
+    storesSyncHint: (at: number | null) => (at ? `Son eşleştirme: ${formatRelative(at)}` : "GOG kataloğunu Steam oyunlarıyla eşleştirir"),
     cancel: "Durdur",
     resumable: "Önceki katalog indirmesi yarıda kaldı.",
     resume: "Devam et",
@@ -195,8 +250,16 @@ export const tr = {
       featured: "Öne çıkan oyunlar alınıyor…",
       catalog: "Katalog indiriliyor…",
       new_releases: "Yeni çıkanlar alınıyor…",
+      gog_catalog: "GOG kataloğu okunuyor…",
+      matching: "Oyunlar eşleştiriliyor…",
+      gog_ids: "GOG kimlikleri doğrulanıyor…",
       finalizing: "Son rötuşlar yapılıyor…",
     } satisfies Record<SyncPhase, string>,
+    storesWorker: "Mağazalar",
+    storesProgress: (fetched: number, total: number) => `${n(fetched)} / ${n(total)} ürün`,
+    toastStores: (games: number) => `Mağazalar eşleştirildi · ${n(games)} oyun GOG'da`,
+    toastStoresRemaining: (count: number) => `${n(count)} ürünün GOG kimliği bir sonraki eşleştirmede doğrulanacak.`,
+    toastStoresWarning: "GOG kimlik servisine ulaşılamadı; ada göre eşleşmeler kullanılıyor.",
     newProgress: (fetched: number) => `${n(fetched)} oyun işlendi`,
     toastFull: (games: number) => `Katalog güncellendi · ${n(games)} oyun`,
     toastFullNew: (inserted: number) => `${n(inserted)} oyun ilk kez eklendi`,
@@ -286,11 +349,11 @@ const INVALID_CODES: Record<string, string> = {
 };
 
 const ERROR_KINDS: Record<CmdError["kind"], string> = {
-  network: "Steam'e bağlanılamadı. İnternet bağlantını kontrol et.",
+  network: "Sunucuya bağlanılamadı. İnternet bağlantını kontrol et.",
   timeout: "Sunucu zamanında yanıt vermedi.",
-  rate_limited: "Steam şu an çok fazla istek alıyor; biraz sonra tekrar dene.",
+  rate_limited: "Sunucu şu an çok fazla istek alıyor; biraz sonra tekrar dene.",
   http: "Sunucu beklenmeyen bir yanıt verdi.",
-  parse: "Steam'in yanıtı okunamadı.",
+  parse: "Sunucunun yanıtı okunamadı.",
   database: "Yerel veritabanında bir sorun oluştu.",
   cancelled: "İşlem durduruldu.",
   invalid: "Girilen bilgi geçersiz.",

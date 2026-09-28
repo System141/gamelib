@@ -27,7 +27,7 @@
       "csp": {
         "default-src": "'self' ipc: http://ipc.localhost",
         "connect-src": "ipc: http://ipc.localhost",
-        "img-src": "'self' data: https://shared.akamai.steamstatic.com https://shared.fastly.steamstatic.com",
+        "img-src": "'self' data: https://shared.akamai.steamstatic.com https://shared.fastly.steamstatic.com https://*.gog-statics.com https://img.itch.zone",
         "style-src": "'self'",
         "font-src": "'self' data:",
         "script-src": "'self'"
