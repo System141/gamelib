@@ -1,12 +1,14 @@
 # GameLib
 
-Steam'deki **tüm çıkmış oyunları** kapak görselleriyle birlikte bilgisayarına indiren ve şık, hızlı bir arayüzde listeleyen masaüstü uygulaması. Oyunların GOG ve itch.io'daki karşılıklarını otomatik bulur; bu mağazalarda sahip olduğun oyunları uygulamanın içinden indirip kurar ve kendini GitHub'daki yeni sürümlerle günceller. Windows, macOS ve Linux'ta çalışır ([Tauri v2](https://tauri.app) + React).
+Steam'deki **tüm çıkmış oyunları** kapak görselleriyle birlikte bilgisayarına indiren ve şık, hızlı bir arayüzde listeleyen masaüstü uygulaması. Oyunların GOG ve itch.io'daki karşılıklarını otomatik bulur; bu mağazalarda sahip olduğun oyunları uygulamanın içinden indirip kurar ve kendini GitHub'daki yeni sürümlerle günceller. Satın almadan önce fragmanları, incelemeleri, oyunun bilgisayarında çalışıp çalışmayacağını ve fiyat geçmişini gösterir; Steam'in, Epic Games'in kurduğu ve klasörlerindeki oyunları bulup tek listeden başlatır. Windows, macOS ve Linux'ta çalışır ([Tauri v2](https://tauri.app) + React).
 
 ![Oyun ızgarası](docs/screenshots/grid.jpg)
 
 | Detay penceresi | Yeni çıkanlar |
 | --- | --- |
 | ![Detay](docs/screenshots/detail.jpg) | ![Yeni çıkanlar](docs/screenshots/new-releases.jpg) |
+| **Fiyatlar ve fırsatlar** | **Kurulu oyunlar** |
+| ![Fiyatlar ve fırsatlar](docs/screenshots/prices.jpg) | ![Kurulu oyunlar](docs/screenshots/installed.jpg) |
 
 ## Kurulum (hazır paket)
 
@@ -40,10 +42,16 @@ Artifacts 7 gün saklanır. Windows paketi, son commit mesajında `[installer]` 
   - Fiyat ve indirim, geliştirici, yayıncı, platformlar, Steam Deck durumu.
   - Etiketler; tıklanınca filtreye eklenir.
   - "Steam'de Aç" ve "Steam uygulamasında aç" düğmeleri.
+- **Satın almadan önce:**
+  - **Fragmanlar** uygulamanın içinde oynatılır; "YouTube'da oynanış videoları" oyunun oynanışını tarayıcıda arar.
+  - **İncelemeler:** Steam'in tüm diller ve Türkçe için özetleri, son 100 incelemenin ne yöne gittiği ve son bir yılın en faydalı bulunan incelemeleri (önce Türkçeler, sonra İngilizceler).
+  - **Bilgisayarım kaldırır mı?** Minimum ve önerilen sistem gereksinimleri bu bilgisayarın yanında gösterilir. Bellek, ekran kartı belleği, boş alan, SSD, DirectX, Windows sürümü ve 64 bit ölçülüp karşılanıyor ya da eksik diye işaretlenir; işlemci ve ekran kartı için "Karşılaştır" iki modeli karşılaştıran bir arama açar.
+  - **Fiyatlar ve fırsatlar** (ücretsiz bir IsThereAnyDeal anahtarıyla): yasal mağazalardaki güncel fiyatlar ve indirimler, tarihi en düşük fiyat ile son 1 yılın ve 3 ayın en düşüğü, şu anki fiyatın bunlara göre durumu, oyunu içeren abonelikler (ör. PC Game Pass) ve paketler, Steam'in son iki yıldaki fiyatı grafik ve tablo olarak. Bkz. [Fiyatlar](#fiyatlar-isthereanydeal).
 - **Mağazalar (GOG ve itch.io):**
   - "Güncelle → Mağazaları eşleştir" GOG kataloğunu indirir ve Steam oyunlarıyla eşleştirir: önce ada, geliştiriciye ve çıkış yılına göre, sonra GOG'un kendi kimlik eşlemesiyle (GamesDB). Kenar çubuğundaki "GOG" görünümü GOG'da da satılan oyunları listeler.
   - Oyun detayındaki "Mağazalar" bölümü karşılıkları gösterir; ada göre yapılan eşleşmeler onaylanabilir ya da reddedilebilir. itch.io'da Steam kimliği olmadığı için oyun aranıp elle bağlanır.
-- **Hesaplar ve kütüphane:** GOG hesabınla giriş yapar, itch.io için bir API anahtarı eklersin. "Sahip olduklarım" iki hesaptaki oyunları, "Kurulu" kurulu olanları listeler.
+- **Hesaplar ve kütüphane:** GOG hesabınla giriş yapar, itch.io için bir API anahtarı eklersin. "Sahip olduklarım" iki hesaptaki oyunları listeler.
+- **Kurulu:** GameLib'in kurduğu oyunlarla birlikte Steam'in ve Epic Games'in kurduğu, kütüphane klasöründe ve Ayarlar'da eklediğin klasörlerde bulunan oyunlar tek listede; hepsi buradan başlatılır. Ayrıntılar: [Bilgisayardaki oyunlar](#bilgisayardaki-oyunlar).
 - **İndirme ve kurulum:**
   - GOG'da sahip olduğun ve itch.io'da sahip olduğun ya da ücretsiz olan oyunlar "İndir" ile indirilir. Bilgisayarına uygun dosya (ör. Windows, Türkçe) önceden seçili gelir.
   - İndirmeler sıraya girer, duraklatılıp sürdürülebilir, uygulama kapansa bile kaldığı yerden devam eder. GOG dosyaları MD5 ile doğrulanır.
@@ -66,7 +74,9 @@ Artifacts 7 gün saklanır. Windows paketi, son commit mesajında `[installer]` 
 - **Veri kaynağı:** Valve eski `ISteamApps/GetAppList` servisini kaldırdı, yenisi ise API anahtarı istiyor. GameLib bunun yerine Steam mağazasının kendi kullandığı anahtarsız servisleri kullanır:
   - `IStoreQueryService/Query`: oyun listesi, sayfa başına 1000 oyun.
   - `IStoreService/GetTagList`: Türkçe etiket adları.
-  - `IStoreBrowseService/GetItems`: detay penceresindeki Türkçe açıklama ve ekran görüntüleri.
+  - `IStoreBrowseService/GetItems`: detay penceresindeki Türkçe açıklama, ekran görüntüleri, fragmanlar ve inceleme özetleri.
+  - `store.steampowered.com/appreviews` ve `store.steampowered.com/api/appdetails`: incelemeler ve sistem gereksinimleri; yalnızca bir oyunun detayı açıldığında sorulur.
+  - Fiyatlar ise IsThereAnyDeal'ın API'sinden, senin anahtarınla gelir.
 - **Bölge ve dil:**
   - Bölge Türkiye'dir, fiyatlar Steam'in Türkiye için belirlediği USD fiyatlarıdır.
   - Açıklamalar İngilizce çekilir, çünkü çoğu oyunun Türkçe açıklaması yoktur. Türkçesi olanlar detay penceresinde Türkçe gösterilir.
@@ -89,6 +99,18 @@ Hesaplar **Ayarlar** sayfasından bağlanır:
 
 Giriş yaptıktan sonra hesaplardaki oyunlar okunur ve Steam oyunlarıyla eşleştirilir. Kütüphaneyi "Sahip olduklarım → Kütüphaneyi yenile" ile ya da "Mağazaları eşleştir" ile güncelleyebilirsin.
 
+## Fiyatlar (IsThereAnyDeal)
+
+Oyun detayındaki "Fiyatlar ve fırsatlar" bölümü [IsThereAnyDeal](https://isthereanydeal.com)'ın verileriyle çalışır ve ücretsiz bir API anahtarı ister:
+
+1. IsThereAnyDeal'da bir hesap aç ya da giriş yap.
+2. **My Apps** sayfasında yeni bir uygulama kaydet (Ayarlar'daki ya da bölümdeki "Anahtar al" bu sayfayı açar) ve verilen API anahtarını kopyala.
+3. Anahtarı **Ayarlar → Hesaplar → IsThereAnyDeal**'a ya da oyun detayındaki bölüme yapıştırıp "Kaydet"e bas. Anahtar kaydedilmeden önce denenir.
+
+- Fiyatlar Türkiye mağazaları içindir; Steam gibi mağazalar Türkiye'de dolarla sattığı için çoğu fiyat USD'dir. Mağaza bağlantıları IsThereAnyDeal üzerinden mağazaya gider.
+- Anahtar diğer giriş bilgileriyle birlikte `secrets.bin` dosyasında durur (bkz. [Mağazalar ve hesaplar](#mağazalar-ve-hesaplar)); yalnızca IsThereAnyDeal'a giden isteklerin başlığında gönderilir, adreslere, hata mesajlarına ve arayüze girmez. Ayarlar'dan silinebilir.
+- Fiyatlar bir oyun için en fazla yarım saatte bir sorulur.
+
 ## İndirme ve kurulum
 
 - **Kütüphane klasörü:** Oyunlar Ayarlar'da seçilen klasöre (varsayılan `%USERPROFILE%\Games`) kurulur. İndirmeler kurulana kadar bu klasördeki `.gamelib\downloads` altında durur; "Kurulum dosyalarını sakla" kapalıysa başarılı kurulumdan sonra silinir.
@@ -100,6 +122,20 @@ Giriş yaptıktan sonra hesaplardaki oyunlar okunur ve Steam oyunlarıyla eşle�
 - **GOG Galaxy ile kurulanlar:** Windows'ta GOG Galaxy'nin (ya da elle çalıştırılan GOG kurulumlarının) kurduğu oyunlar da "Kurulu" listesinde görünür ve GameLib'den başlatılabilir.
 - **Kaldırma:** GOG oyunlarında oyunun kendi kaldırma programı sessizce çalışır; GameLib'in açtığı arşivlerde oyun klasörü silinir. Kütüphane klasörünün dışındaki hiçbir şey silinmez.
 - **macOS ve Linux:** İndirme ve arşiv açma çalışır; GOG'un `.pkg` ve `.sh` kurulumlarını otomatik çalıştırma şimdilik yalnızca Windows'ta.
+
+## Bilgisayardaki oyunlar
+
+"Kurulu" listesi GameLib'in kurmadığı oyunları da gösterir. Nereye bakılır:
+
+- **Steam:** Steam'in bütün kütüphane klasörleri (`libraryfolders.vdf`); tamamen kurulmuş oyunlar. Steam'in araçları ve çalışma ortamları (ör. Steamworks Common Redistributables, Proton) oyun sayılmaz.
+- **Epic Games Launcher** (Windows ve macOS): kurulumu bitmiş oyunlar; eklentiler ve Unreal Engine gibi araçlar hariç.
+- **Oyun klasörleri:** kütüphane klasörü ve **Ayarlar → Oyun klasörleri**'nde eklediğin klasörler. İçlerindeki her klasör, bu sisteme uygun bir program barındırıyorsa bir oyun sayılır. Eklediğin klasör tek bir oyunun klasörüyse (içinde `goggame-*.info`, `.itch.toml` ya da `steam_appid.txt` varsa) kendisi bir oyun olarak alınır.
+
+Hangi Steam oyunu olduğu, oyunun kendi bilgisinden anlaşılır: Steam'in uygulama kimliği, klasördeki GOG ya da itch.io oyununun mağaza eşleşmesi, `steam_appid.txt`; bunlar yoksa Steam'de o adda tek bir oyun olması. Eşleşmeyen ya da yanlış eşleşen oyunu kartındaki "Eşleştir" ile ya da menüdeki "Steam oyununu değiştir" ile düzeltebilirsin; "Steam'de yok" da denebilir. Eşleşen oyunların detayı, incelemeleri ve fiyatları görünür, detaydaki "Oyna" da onları başlatır.
+
+- **Başlatma:** Steam ve Epic Games oyunları kendi başlatıcılarıyla açılır. Klasördeki oyunlarda GOG'un `goggame-*.info` ya da itch.io'nun `.itch.toml` dosyası başlatılacak dosyayı söyler; yoksa en olası program seçilir ve oyun menüsündeki "Başlatılacak dosya"dan değiştirilebilir.
+- **Kaldırma:** GameLib kendi kurmadığı hiçbir oyunu silmez. Steam oyunlarında "Steam'de kaldır" Steam'in kaldırma penceresini açar; diğerleri "Listeden gizle" ile listeden kalkar ve **Ayarlar → Oyun klasörleri → Gizlenen oyunlar**'dan geri getirilir.
+- **Tarama:** Uygulama açılırken, "Kurulu" açıldığında (en fazla birkaç dakikada bir), klasörler değişince ve "Yeniden tara" ile yapılır. Eşleştirme, gizleme ve seçilen dosya taramalar arasında korunur. Takılı olmayan bir diskteki oyunlar disk geri takılana kadar listede görünmez ama ayarları silinmez.
 
 ## Gereksinimler
 
@@ -200,7 +236,7 @@ gamelib-cli stores stats                             # eşleşme sayıları
 gamelib-cli stores match 292030                      # bir Steam oyununun mağaza karşılıkları
 ```
 
-Tarayıcı önizlemesi mağaza eşleştirmesini ve hesapları da gösterir; indirme, kurulum ve güncelleme yalnızca masaüstü uygulamasında yapılır.
+Tarayıcı önizlemesi mağaza eşleştirmesini, hesapları, fiyatları ve bilgisayardaki oyunları da gösterir; indirme, kurulum, oyun başlatma ve güncelleme yalnızca masaüstü uygulamasında yapılır.
 
 Varsayılan olarak masaüstü uygulamasının veritabanını kullanır (bkz. [Veri konumu](#veri-konumu)), böylece ikisi aynı kataloğu görür. Başka bir dosya için `--db PATH` ver. Masaüstü uygulaması ve CLI aynı anda katalog indirmeye çalışırsa ikincisi "zaten bir güncelleme sürüyor" yanıtı alır. Tüm komutlar için `help` alt komutuna bak.
 
@@ -214,7 +250,7 @@ Varsayılan olarak masaüstü uygulamasının veritabanını kullanır (bkz. [Ve
 
 `gamelib-cli` de varsayılan olarak bu dosyayı kullanır. Kataloğu sıfırlamak için uygulama kapalıyken bu dosyayı silmen yeterli. Dosya silinince eklediğin bağlantılar, eşleşme kararların, indirme listesi ve kurulum kayıtları da silinir (kurulu oyunların dosyaları kalır).
 
-Hesap bilgileri aynı klasördeki `secrets.bin` dosyasındadır; silinirse hesaplardan çıkış yapılmış olur. İndirmeler ve kurulan oyunlar kütüphane klasöründedir (bkz. [İndirme ve kurulum](#indirme-ve-kurulum)).
+Hesap bilgileri ve IsThereAnyDeal anahtarı aynı klasördeki `secrets.bin` dosyasındadır; silinirse hesaplardan çıkış yapılmış olur. İndirmeler ve kurulan oyunlar kütüphane klasöründedir (bkz. [İndirme ve kurulum](#indirme-ve-kurulum)).
 
 ## Proje yapısı
 
@@ -229,7 +265,10 @@ crates/gamelib-core/   Tauri'den bağımsız çekirdek: Steam istemcisi, SQLite,
   src/stores/          GOG kataloğu, GamesDB, eşleştirme, GOG ve itch.io hesapları
   src/secrets.rs       giriş bilgilerinin şifreli saklanması
   src/downloads/       indirme kuyruğu: sürdürme, adres yenileme, MD5 doğrulama, torrent aktarımı
-  src/install/         kurulum: dosya türü, arşivler, başlatılacak dosya, Windows'a özel kısımlar
+  src/install/         kurulum: dosya türü, arşivler, başlatılacak dosya, Windows'a özel kısımlar;
+                       bilgisayardaki oyunları tarama (Steam, Epic Games, oyun klasörleri)
+  src/pc/              bu bilgisayarın donanımı ve sistem gereksinimlerinin okunması
+  src/prices/          IsThereAnyDeal fiyatları
 crates/gamelib-cli/    komut satırı aracı ve tarayıcı önizlemesi için yerel sunucu (src/serve.rs)
 src-tauri/             masaüstü kabuğu: komutlar, olaylar, pencere ve güvenlik ayarları
 src/                   React arayüzü (tüm metinler src/i18n/tr.ts içinde)
@@ -260,6 +299,8 @@ Her indirme sitesinin bağlantı yapısı ve yönlendirmeleri farklıdır. Bu y�
 - **GOG kurulumu başlamıyor:** Windows'un izin penceresinde (UAC) "Evet" demelisin; "Hayır" kurulumu iptal eder. İndirmeler sayfasındaki "Yeniden dene" ile tekrar başlatabilirsin.
 - **"Windows ya da antivirüs programı bu dosyayı engelledi":** Antivirüs indirilen dosyayı karantinaya aldı. Dosyaya güveniyorsan antivirüsün karantinasından geri yükleyip yeniden dene.
 - **"GOG oturumunun süresi doldu":** Ayarlar'dan GOG'a yeniden giriş yap.
+- **Bir oyun "Kurulu"da görünmüyor:** Oyunun klasörünü içeren klasörü **Ayarlar → Oyun klasörleri**'ne ekleyip "Yeniden tara"ya bas. Klasörde bu sisteme uygun bir program olmalı (Windows'ta `.exe`). Gizlediğin oyunlar aynı sayfadaki "Gizlenen oyunlar"dadır.
+- **"IsThereAnyDeal API anahtarı geçersiz ya da iptal edilmiş":** IsThereAnyDeal'daki My Apps sayfasında anahtarı kontrol edip yeniden yapıştır.
 
 ## Kapsam
 
@@ -274,9 +315,9 @@ Torrent indirmeleri uygulamanın kendi BitTorrent motoruyla (librqbit) yapılır
 - Windows kod imzası (ör. SignPath Foundation'ın açık kaynak projelere ücretsiz imzası), böylece SmartScreen uyarısı kalkar
 - Steam demolarını ve Playtest'leri listeleme
 - Bağlantıları dışa ve içe aktarma (yedekleme)
-- Bilgisayardaki Steam kütüphanesini okuma
+- Linux'ta Heroic ve Legendary'nin kurduğu (Epic, GOG) oyunları okuma
 - Valve anahtarsız servisi kapatırsa API anahtarıyla çalışan yedek kaynak
 
 ## Yasal uyarı
 
-GameLib, Valve Corporation, CD PROJEKT (GOG) ve itch.io ile bağlantılı değildir. Steam ve ilgili logolar Valve Corporation'ın, GOG ve GOG.com CD PROJEKT'in, itch.io Leaf Corp.'un ticari markalarıdır. Oyun adları, açıklamaları ve görselleri sahiplerine aittir; Steam'in herkese açık mağaza servislerinden gösterilir.
+GameLib, Valve Corporation, CD PROJEKT (GOG), itch.io, Epic Games ve IsThereAnyDeal ile bağlantılı değildir. Steam ve ilgili logolar Valve Corporation'ın, GOG ve GOG.com CD PROJEKT'in, itch.io Leaf Corp.'un, Epic Games ve Epic Games Launcher Epic Games, Inc.'in ticari markalarıdır. Fiyat verileri IsThereAnyDeal'dan gelir. Oyun adları, açıklamaları ve görselleri sahiplerine aittir; Steam'in herkese açık mağaza servislerinden gösterilir.
