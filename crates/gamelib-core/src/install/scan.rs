@@ -17,8 +17,25 @@ use crate::model::{FoundSource, Platform};
 const STEAM_INSTALLED: u64 = 4;
 /// Manifests and receipts are small; anything larger is not one.
 const MAX_FILE: u64 = 4 << 20;
-/// Folders in a scanned folder that are never games.
-const NOT_GAMES: &[&str] = &["steamapps", "$recycle.bin", "system volume information"];
+/// Folders in a scanned folder that are never games, including a system drive's own (when a
+/// whole drive is added).
+const NOT_GAMES: &[&str] = &[
+    "steamapps",
+    "$recycle.bin",
+    "system volume information",
+    "windows",
+    "program files",
+    "program files (x86)",
+    "programdata",
+    "users",
+    "perflogs",
+    "recovery",
+    "msocache",
+    "$windows.~bt",
+    "$windows.~ws",
+    "windowsapps",
+    "xboxgames",
+];
 
 /// Where to look.
 #[derive(Debug, Clone)]
@@ -758,6 +775,25 @@ mod tests {
         assert_eq!(found.games[0].clue, Clue::SteamAppid(504230));
         assert_eq!(found.games[0].dir, game);
         assert_eq!(found.unreachable, [base.join("Missing")]);
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_whole_drive_skips_the_systems_folders() {
+        let base = temp("drive");
+        let exe = |p: &Path| write(p, "MZ");
+        exe(&base.join("Windows").join("explorer.exe"));
+        exe(&base.join("Program Files").join("App").join("app.exe"));
+        exe(&base.join("Celeste").join("Celeste.exe"));
+        let found = scan(&ScanPlan {
+            steam: Vec::new(),
+            epic: None,
+            folders: vec![base.clone()],
+            known: Vec::new(),
+            platform: Platform::Win,
+        });
+        let dirs: Vec<&Path> = found.games.iter().map(|g| g.dir.as_path()).collect();
+        assert_eq!(dirs, [base.join("Celeste").as_path()]);
         fs::remove_dir_all(&base).unwrap();
     }
 

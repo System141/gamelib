@@ -3,6 +3,7 @@
 //! way itch.io's app picks one.
 
 use std::cmp::Reverse;
+use std::collections::VecDeque;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -14,6 +15,9 @@ use crate::model::Platform;
 const MAX_DEPTH: usize = 5;
 /// Candidates offered when the guess is uncertain.
 const MAX_CANDIDATES: usize = 12;
+/// Files and folders looked at in one folder at most: a game's programs are near the top, and a
+/// folder with far more (a whole drive added as a game folder) is not searched through.
+const MAX_ENTRIES: usize = 20_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaunchTarget {
@@ -147,7 +151,7 @@ pub fn itch_manifest(dir: &Path, platform: Platform) -> Option<LaunchTarget> {
 /// do not look like tools first, then larger files.
 pub fn candidates(dir: &Path, platform: Platform) -> Vec<PathBuf> {
     let mut found: Vec<(usize, bool, u64, PathBuf)> = Vec::new();
-    walk(dir, 0, platform, &mut found);
+    walk(dir, platform, &mut found);
     found.sort_by_key(|(depth, tool, size, path)| (*depth, *tool, Reverse(*size), path.clone()));
     found
         .into_iter()
@@ -164,34 +168,36 @@ pub fn guess(dir: &Path, platform: Platform) -> Option<LaunchTarget> {
         .map(LaunchTarget::plain)
 }
 
-fn walk(
-    dir: &Path,
-    depth: usize,
-    platform: Platform,
-    found: &mut Vec<(usize, bool, u64, PathBuf)>,
-) {
-    if depth > MAX_DEPTH {
-        return;
-    }
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_lowercase();
-        let Ok(meta) = entry.metadata() else {
+/// Level by level, so the shallow programs (where games keep theirs) are seen before the walk
+/// runs out of entries in a huge folder.
+fn walk(root: &Path, platform: Platform, found: &mut Vec<(usize, bool, u64, PathBuf)>) {
+    let mut queue = VecDeque::from([(root.to_path_buf(), 0)]);
+    let mut budget = MAX_ENTRIES;
+    while let Some((dir, depth)) = queue.pop_front() {
+        let Ok(entries) = fs::read_dir(&dir) else {
             continue;
         };
-        if meta.is_dir() {
-            if platform == Platform::Mac && name.ends_with(".app") {
-                found.push((depth, looks_like_tool(&name), dir_size(&path), path));
-            } else if !IGNORED_DIRS.contains(&name.as_str()) {
-                walk(&path, depth + 1, platform, found);
+        for entry in entries.flatten() {
+            if budget == 0 {
+                return;
             }
-            continue;
-        }
-        if is_program(&name, &meta, platform) && !is_helper(&name) {
-            found.push((depth, looks_like_tool(&name), meta.len(), path));
+            budget -= 1;
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            if meta.is_dir() {
+                if platform == Platform::Mac && name.ends_with(".app") {
+                    found.push((depth, looks_like_tool(&name), dir_size(&path), path));
+                } else if depth < MAX_DEPTH && !IGNORED_DIRS.contains(&name.as_str()) {
+                    queue.push_back((path, depth + 1));
+                }
+                continue;
+            }
+            if is_program(&name, &meta, platform) && !is_helper(&name) {
+                found.push((depth, looks_like_tool(&name), meta.len(), path));
+            }
         }
     }
 }
