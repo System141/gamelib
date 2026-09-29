@@ -20,6 +20,7 @@ import type {
   GameDetail,
   GameLink,
   GameMedia,
+  GameRequirements,
   GameReviews,
   GamePage,
   GameQuery,
@@ -37,6 +38,7 @@ import type {
   TagInfo,
   UpdateStatus,
   WorkerKind,
+  RequirementLine,
 } from "../lib/types";
 
 export interface Fixture {
@@ -206,6 +208,9 @@ export class MockBackend {
       case "get_game_reviews":
         await sleep(450);
         return fakeReviews(args.appid);
+      case "get_game_requirements":
+        await sleep(400);
+        return fakeRequirements();
       case "start_store_sync":
         return this.startWorker("stores");
       case "get_store_matches":
@@ -1366,5 +1371,66 @@ function fakeReviews(appid: number): GameReviews {
       },
     ],
     recent: { count: 100, positive, from: now - 3 * 86_400, to: now - 600 },
+  };
+}
+
+/** Requirements of a modern game against a mid-range Windows 11 computer. */
+function fakeRequirements(): GameRequirements {
+  const GB = 1024 ** 3;
+  const line = (kind: RequirementLine["kind"], text: string): RequirementLine => ({ kind, label: null, text });
+  return {
+    platform: "win",
+    minimum: {
+      lines: [
+        line("os", "Windows 10 64-bit"),
+        line("processor", "Intel Core i5-8400 / AMD Ryzen 5 2600"),
+        line("memory", "12 GB RAM"),
+        line("graphics", "NVIDIA GeForce GTX 1660 / AMD Radeon RX 5500 XT (6 GB VRAM)"),
+        line("directx", "Version 12"),
+        line("storage", "70 GB available space"),
+        line("notes", "SSD required"),
+      ],
+      checks: [
+        { kind: "memory", need: 12 * GB, have: 16 * GB, verdict: "ok" },
+        { kind: "video_memory", need: 6 * GB, have: 12 * GB, verdict: "ok" },
+        { kind: "storage", need: 70 * GB, have: 180 * GB, verdict: "ok" },
+        { kind: "ssd", need: 1, have: 1, verdict: "ok" },
+        { kind: "directx", need: 12, have: 12, verdict: "ok" },
+        { kind: "windows", need: 10, have: 11, verdict: "ok" },
+        { kind: "bits64", need: 1, have: 1, verdict: "ok" },
+      ],
+    },
+    recommended: {
+      lines: [
+        line("os", "Windows 11 64-bit"),
+        line("processor", "Intel Core i7-12700 / AMD Ryzen 7 5800X"),
+        line("memory", "32 GB RAM"),
+        line("graphics", "NVIDIA GeForce RTX 3070 / AMD Radeon RX 6800 (8 GB VRAM)"),
+        line("directx", "Version 12"),
+        line("storage", "70 GB available space"),
+      ],
+      checks: [
+        { kind: "memory", need: 32 * GB, have: 16 * GB, verdict: "short" },
+        { kind: "video_memory", need: 8 * GB, have: 12 * GB, verdict: "ok" },
+        { kind: "storage", need: 70 * GB, have: 180 * GB, verdict: "ok" },
+        { kind: "directx", need: 12, have: 12, verdict: "ok" },
+        { kind: "windows", need: 11, have: 11, verdict: "ok" },
+        { kind: "bits64", need: 1, have: 1, verdict: "ok" },
+      ],
+    },
+    pc: {
+      os: "Windows 11 24H2 (26100)",
+      windows: 11,
+      bits64: true,
+      cpu: "AMD Ryzen 5 5600X 6-Core Processor",
+      cores: 12,
+      memory: 16 * GB,
+      gpu: "NVIDIA GeForce RTX 3060",
+      videoMemory: 12 * GB,
+      directx: 12,
+      diskFree: 180 * GB,
+      diskSsd: true,
+      diskPath: "C:\\Users\\oyuncu\\Games",
+    },
   };
 }

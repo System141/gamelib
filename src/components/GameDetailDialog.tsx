@@ -12,6 +12,7 @@ import { GameArt } from "./GameArt";
 import { SteamIcon } from "./icons";
 import { LinksSection } from "./LinksSection";
 import { useInstallActions } from "./InstallActions";
+import { RequirementsSection } from "./RequirementsSection";
 import { ReviewsSection } from "./ReviewsSection";
 import { StoresSection } from "./StoresSection";
 import { TrailerPlayer } from "./TrailerPlayer";
@@ -252,6 +253,8 @@ function Detail({
           </section>
 
           <ReviewsSection appid={game.appid} summaries={media.data?.reviews} onOpenSteam={() => void openSteam("web")} />
+
+          <RequirementsSection appid={game.appid} />
 
           <StoresSection appid={game.appid} onStoreSync={onStoreSync} />
 

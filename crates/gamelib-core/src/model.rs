@@ -361,6 +361,26 @@ pub struct SyncFinished {
     pub error: Option<ErrorInfo>,
 }
 
+/// A game's system requirements next to this computer: "Bilgisayarım kaldırır mı?".
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameRequirements {
+    /// The system these requirements are for: this computer's, or Windows when the game lists
+    /// nothing for it.
+    pub platform: Platform,
+    pub minimum: RequirementList,
+    pub recommended: RequirementList,
+    pub pc: crate::pc::hardware::ThisPc,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementList {
+    pub lines: Vec<crate::pc::requirements::RequirementLine>,
+    /// What could be measured against this computer.
+    pub checks: Vec<crate::pc::requirements::Check>,
+}
+
 /// A site "search the web" buttons open (gameplay videos, hardware comparisons).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]

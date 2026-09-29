@@ -47,6 +47,7 @@ pub fn run() {
             commands::list_tags,
             commands::get_game_media,
             commands::get_game_reviews,
+            commands::get_game_requirements,
             commands::start_store_sync,
             commands::get_store_matches,
             commands::refresh_store_matches,

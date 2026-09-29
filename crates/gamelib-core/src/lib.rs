@@ -9,6 +9,7 @@
 //! - [`downloads`]: the download queue for GOG, itch.io and torrent files, with resume and
 //!   checksums.
 //! - [`install`]: installing finished downloads, starting and removing installed games.
+//! - [`pc`]: this computer's hardware and games' system requirements.
 //! - [`app`]: the command layer shared by the desktop app and `gamelib-cli serve`.
 
 pub mod app;
@@ -21,6 +22,7 @@ pub mod install;
 pub mod links;
 pub mod model;
 pub mod new_releases;
+pub mod pc;
 pub mod rating;
 pub mod record;
 pub mod search;

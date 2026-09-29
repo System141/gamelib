@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fold, normalizeName } from "./fold";
+import { comparableModel, listVerdict, vendorOf, worst } from "./requirements";
 import {
   fileKind,
   formatBytes,
@@ -126,5 +127,44 @@ describe("errorText", () => {
     expect(errorText({ kind: "invalid", message: "archive_corrupt" })).toBe("Arşiv bozuk; yeniden indirmeyi dene.");
     expect(errorText({ kind: "invalid", message: "unknown_code:1" })).toBe("Girilen bilgi geçersiz.");
     expect(errorText({ kind: "network", message: "x" })).toContain("İnternet");
+  });
+});
+
+describe("requirements", () => {
+  const check = (verdict: "ok" | "short" | "unknown", kind: "memory" | "storage" = "memory") => ({ kind, need: 1, have: 1, verdict });
+
+  it("finds the worst verdict of a list", () => {
+    expect(worst([])).toBeNull();
+    expect(worst([check("ok"), check("unknown")])).toBe("unknown");
+    expect(worst([check("unknown"), check("short")])).toBe("short");
+    expect(listVerdict({ lines: [], checks: [] })).toEqual({ kind: "none" });
+    expect(listVerdict({ lines: [], checks: [check("ok"), check("short", "storage")] })).toEqual({ kind: "short", missing: ["storage"] });
+    expect(listVerdict({ lines: [], checks: [check("ok"), check("unknown")] })).toEqual({ kind: "partial" });
+    expect(listVerdict({ lines: [], checks: [check("ok")] })).toEqual({ kind: "ok" });
+  });
+
+  it("tells makers apart", () => {
+    expect(vendorOf("NVIDIA GeForce RTX 3060")).toBe("nvidia");
+    expect(vendorOf("AMD Radeon RX 6600 XT")).toBe("amd");
+    expect(vendorOf("Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz")).toBe("intel");
+    expect(vendorOf("AMD Ryzen 5 3600X 6-Core Processor")).toBe("amd");
+    expect(vendorOf("Intel Arc A580")).toBe("intel");
+    expect(vendorOf("Qualcomm Adreno X1")).toBe("qualcomm");
+    expect(vendorOf("Dual Core 3.0 Ghz")).toBeNull();
+  });
+
+  it("picks the model to compare with", () => {
+    const gpu = "GeForce GTX 1660 / Radeon RX 5500 XT 8GB / Arc A580";
+    expect(comparableModel(gpu, "AMD Radeon RX 6600")).toBe("Radeon RX 5500 XT");
+    expect(comparableModel(gpu, "NVIDIA GeForce RTX 3060")).toBe("GeForce GTX 1660");
+    expect(comparableModel(gpu, null)).toBe("GeForce GTX 1660");
+    expect(
+      comparableModel("Nvidia GTX 970 / RX 480 / Intel Arc A380 / Qualcomm Adreno X1 (4GB+ of VRAM)", "Intel(R) Arc(TM) A770 Graphics"),
+    ).toBe("Intel Arc A380");
+    expect(comparableModel("Core i5-8400 / Ryzen 5 2600", "AMD Ryzen 7 5800X3D")).toBe("Ryzen 5 2600");
+    expect(comparableModel("2.0 Ghz", "Intel Core i5")).toBeNull();
+    expect(comparableModel("Dual Core 3.0 Ghz", null)).toBeNull();
+    expect(comparableModel("128mb Video Memory, capable of Shader Model 2.0+", null)).toBeNull();
+    expect(comparableModel("Intel I5 4690 / AMD FX 8350 / Snapdragon X Elite", "AMD Ryzen 5 5600")).toBe("AMD FX 8350");
   });
 });

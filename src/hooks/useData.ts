@@ -48,6 +48,17 @@ export function useGameMedia(appid: number | null) {
   });
 }
 
+/** System requirements next to this computer; read from Steam once per session per game. */
+export function useGameRequirements(appid: number | null) {
+  return useQuery({
+    queryKey: ["requirements", appid],
+    queryFn: () => api.getGameRequirements(appid!),
+    enabled: appid != null,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
 /** Helpful and latest reviews; read from Steam once per half hour per game. */
 export function useGameReviews(appid: number | null) {
   return useQuery({

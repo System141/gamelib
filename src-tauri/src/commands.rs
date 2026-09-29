@@ -6,9 +6,9 @@ use std::sync::Arc;
 use gamelib_core::app::{App, search_url, steam_url};
 use gamelib_core::model::{
     Accounts, AppStatus, Download, DownloadList, FileOption, FoundLink, GameDetail, GameLink,
-    GameMedia, GamePage, GameQuery, GameReviews, Installed, LibraryItem, LinkCheck, LinkInput,
-    MatchState, OpenTarget, SearchSite, Settings, SettingsPatch, SiteInfo, Store, StoreMatch,
-    StoreSearchHit, TagInfo,
+    GameMedia, GamePage, GameQuery, GameRequirements, GameReviews, Installed, LibraryItem,
+    LinkCheck, LinkInput, MatchState, OpenTarget, SearchSite, Settings, SettingsPatch, SiteInfo,
+    Store, StoreMatch, StoreSearchHit, TagInfo,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -74,6 +74,14 @@ pub async fn list_tags(app: State<'_, Arc<App>>) -> CmdResult<Vec<TagInfo>> {
 #[tauri::command]
 pub async fn get_game_media(app: State<'_, Arc<App>>, appid: u32) -> CmdResult<GameMedia> {
     blocking(&app, move |app| app.game_media(appid)).await
+}
+
+#[tauri::command]
+pub async fn get_game_requirements(
+    app: State<'_, Arc<App>>,
+    appid: u32,
+) -> CmdResult<GameRequirements> {
+    blocking(&app, move |app| app.game_requirements(appid)).await
 }
 
 #[tauri::command]

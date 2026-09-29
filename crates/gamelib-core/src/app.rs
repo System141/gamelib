@@ -21,10 +21,11 @@ use crate::install::{self, InstallManager};
 use crate::links::{SiteRegistry, find, resolve, validate};
 use crate::model::{
     Account, Accounts, AppStatus, Download, DownloadList, DownloadSourceKind, FileOption,
-    FoundLink, GameDetail, GameLink, GameMedia, GamePage, GameQuery, GameReviews, Installed,
-    LibraryItem, LibraryReport, LinkCheck, LinkInput, MatchState, NewReleasesReport, OpenTarget,
-    Outcome, Platform, SearchSite, Settings, SettingsPatch, SiteInfo, Store, StoreMatch,
-    StoreSearchHit, StoresReport, SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
+    FoundLink, GameDetail, GameLink, GameMedia, GamePage, GameQuery, GameRequirements, GameReviews,
+    Installed, LibraryItem, LibraryReport, LinkCheck, LinkInput, MatchState, NewReleasesReport,
+    OpenTarget, Outcome, Platform, RequirementList, SearchSite, Settings, SettingsPatch, SiteInfo,
+    Store, StoreMatch, StoreSearchHit, StoresReport, SyncFinished, SyncProgress, SyncReport,
+    TagInfo, WorkerKind,
 };
 use crate::new_releases::{NewReleasesOptions, fetch_new_releases};
 use crate::secrets::{ItchKey, SecretStore};
@@ -267,6 +268,47 @@ impl App {
     /// a game is opened.
     pub fn game_media(&self, appid: u32) -> Result<GameMedia> {
         SteamClient::new()?.fetch_media(appid, &AtomicBool::new(false))
+    }
+
+    /// The game's system requirements for this computer's system (Windows when it lists none
+    /// for it), measured against this computer.
+    pub fn game_requirements(&self, appid: u32) -> Result<GameRequirements> {
+        use crate::pc::{hardware, requirements as req};
+        let all = steam::appdetails::requirements(
+            &http::api_client(std::time::Duration::from_secs(20))?,
+            &self.options.stores.endpoints.steam_store,
+            appid,
+            &AtomicBool::new(false),
+            &Counters::default(),
+        )?;
+        let parsed = |platform: Platform| {
+            all.iter()
+                .find(|(p, _)| *p == platform)
+                .map(|(_, html)| {
+                    (
+                        req::parse_list(&html.minimum),
+                        req::parse_list(&html.recommended),
+                    )
+                })
+                .unwrap_or_default()
+        };
+        let here = crate::downloads::sources::this_platform();
+        let (platform, (minimum, recommended)) = match parsed(here) {
+            (min, rec) if !min.is_empty() || !rec.is_empty() => (here, (min, rec)),
+            _ => (Platform::Win, parsed(Platform::Win)),
+        };
+        let library = PathBuf::from(read_settings(lock(&self.reader).conn())?.library_dir);
+        let pc = hardware::detect(&library);
+        let list = |lines: Vec<req::RequirementLine>| RequirementList {
+            checks: req::check(&req::needs(&lines), &pc),
+            lines,
+        };
+        Ok(GameRequirements {
+            platform,
+            minimum: list(minimum),
+            recommended: list(recommended),
+            pc,
+        })
     }
 
     /// The most helpful and the latest reviews, fetched from Steam when a game is opened.

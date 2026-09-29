@@ -146,6 +146,56 @@ export interface GameReviews {
 
 export type SearchSite = "youtube" | "google";
 
+// --- system requirements ----------------------------------------------------------------------
+
+export type RequirementKind = "os" | "processor" | "memory" | "graphics" | "directx" | "storage" | "sound" | "network" | "notes" | "other";
+
+export interface RequirementLine {
+  kind: RequirementKind;
+  /** The store's own label, for lines of a kind GameLib does not know ("VR Support"). */
+  label: string | null;
+  text: string;
+}
+
+export type CheckKind = "memory" | "video_memory" | "storage" | "ssd" | "directx" | "windows" | "bits64";
+export type Verdict = "ok" | "short" | "unknown";
+
+/** `need`/`have`: bytes for sizes, the version for DirectX and Windows, 1/0 for yes-or-no checks. */
+export interface RequirementCheck {
+  kind: CheckKind;
+  need: number;
+  have: number | null;
+  verdict: Verdict;
+}
+
+export interface RequirementList {
+  lines: RequirementLine[];
+  checks: RequirementCheck[];
+}
+
+export interface ThisPc {
+  os: string;
+  windows: number | null;
+  bits64: boolean;
+  cpu: string | null;
+  cores: number | null;
+  memory: number | null;
+  gpu: string | null;
+  videoMemory: number | null;
+  directx: number | null;
+  diskFree: number | null;
+  diskSsd: boolean | null;
+  diskPath: string;
+}
+
+export interface GameRequirements {
+  /** The system these requirements are for. */
+  platform: Platform;
+  minimum: RequirementList;
+  recommended: RequirementList;
+  pc: ThisPc;
+}
+
 export type WorkerKind = "full" | "new_releases" | "stores" | "library";
 export type SyncPhase =
   "starting" | "tags" | "featured" | "catalog" | "new_releases" | "gog_catalog" | "matching" | "gog_ids" | "library" | "finalizing";

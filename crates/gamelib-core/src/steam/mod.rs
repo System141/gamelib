@@ -4,6 +4,7 @@
 //! store's own `IStoreQueryService/Query` works without one and returns up to 1000 games per page
 //! together with names, reviews, prices and image file names.
 
+pub mod appdetails;
 pub mod assets;
 pub mod reviews;
 pub mod types;

@@ -260,6 +260,9 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         "list_tags" => to_json(&app.list_tags()?),
         "get_game_media" => to_json(&app.game_media(parse::<AppidArgs>(args)?.appid)?),
         "get_game_reviews" => to_json(&app.game_reviews(parse::<AppidArgs>(args)?.appid)?),
+        "get_game_requirements" => {
+            to_json(&app.game_requirements(parse::<AppidArgs>(args)?.appid)?)
+        }
         "start_store_sync" => {
             app.start_store_sync()?;
             Value::Null
