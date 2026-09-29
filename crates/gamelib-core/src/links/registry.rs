@@ -1,8 +1,10 @@
 use reqwest::Url;
+use reqwest::blocking::Client;
 
 use super::SiteHandler;
+use super::find::{self, FindQuery};
 use super::sites::{self, generic::GenericSite};
-use crate::model::SiteInfo;
+use crate::model::{FoundLink, SiteInfo};
 
 /// Picks the handler for a link: the first site-specific handler that matches, else the generic one.
 pub struct SiteRegistry {
@@ -48,6 +50,11 @@ impl SiteRegistry {
             .map(|h| h.info().clone())
             .chain(std::iter::once(self.fallback.info().clone()))
             .collect()
+    }
+
+    /// Asks every handler to search for the game. Sites that cannot search return nothing.
+    pub fn find_all(&self, query: &FindQuery, http: &Client) -> Vec<FoundLink> {
+        find::find_all(&self.handlers, query, http)
     }
 }
 

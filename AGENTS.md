@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-GameLib is a Tauri 2 desktop app (Windows/macOS/Linux) that mirrors the released Steam catalog (~130k games) into a local SQLite database and presents it in a React SPA. It also signs in to GOG and itch.io to read owned libraries, download/install/launch those games, and store user-added external links per game.
+GameLib is a Tauri 2 desktop app (Windows/macOS/Linux) that mirrors the released Steam catalog (~130k games) into a local SQLite database and presents it in a React SPA. It also signs in to GOG and itch.io to read owned libraries, download/install/launch those games, run magnet/`.torrent` downloads through the same queue, open pages in its own browser window, and store user-added external links per game.
 
 - UI language is Turkish-only (`<html lang="tr">`), region hard-wired to Turkey (USD prices, English descriptions). `README.md` is the user-facing doc and is written in Turkish.
 - One Rust workspace with a React frontend; the browser preview is served by the CLI, not by a standalone web backend.
@@ -16,7 +16,7 @@ Workspace members (root `Cargo.toml`, `default-members` deliberately excludes `s
 |---|---|---|
 | `gamelib-core` | `crates/gamelib-core` | All domain logic. Zero Tauri dependency; only coupling to shells is the `EventSink` trait (`src/app.rs`). |
 | `gamelib-cli` | `crates/gamelib-cli` | Headless CLI; `serve` re-exposes the same command surface over loopback HTTP (`127.0.0.1:1430`) for the Vite browser preview. |
-| `gamelib` (lib `gamelib_lib`) | `src-tauri` | Thin shell: 51 `#[tauri::command]` wrappers, `tauri-plugin-opener`/`dialog`, window + CSP config. |
+| `gamelib` (lib `gamelib_lib`) | `src-tauri` | Thin shell: 52 `#[tauri::command]` wrappers, `tauri-plugin-opener`/`dialog`, window + CSP config. |
 
 Layering inside `gamelib-core/src/` (all modules declared in `lib.rs`):
 
@@ -29,7 +29,7 @@ Layering inside `gamelib-core/src/` (all modules declared in `lib.rs`):
 
 Core invariants:
 
-- **Synchronous/blocking by design.** No tokio, no `async fn`, `reqwest` `blocking` feature, `std::thread` workers. Tauri commands wrap DB/network work in `blocking()` (`tauri::async_runtime::spawn_blocking`, `src-tauri/src/commands.rs`); pure flag flips stay sync `fn`.
+- **Synchronous/blocking by design.** No tokio, no `async fn`, `reqwest` `blocking` feature, `std::thread` workers. One exception: `downloads/torrent.rs` builds a Tokio runtime for a single librqbit transfer and drops it with the transfer. Tauri commands wrap DB/network work in `blocking()` (`tauri::async_runtime::spawn_blocking`, `src-tauri/src/commands.rs`); pure flag flips stay sync `fn`.
 - **One DB connection per worker.** Threads `gamelib-job`, `gamelib-downloads`, `gamelib-installs` each open their own `Db`. One catalog job at a time (in-process `AtomicBool` + `<db>.job-lock` file lock, so desktop and CLI can't sync the same DB concurrently).
 - **Never hold `App`'s `Mutex<Db>` across a network request or spawned process** (explicit comments in `app.rs`, `install/mod.rs`).
 - **`EventSink` is the only outbound path to the UI:** Tauri `AppHandle::emit` in the desktop app, SSE frames on `GET /api/events` in `serve`.
@@ -52,6 +52,8 @@ Store matching: `run_store_sync` pages the GOG catalog → `store_products`, tit
 
 Downloads/install: `enqueue_download` → queue row, CAS `transition(Queued → Downloading)` → `fetch::fetch` into `<library>/.gamelib/downloads/<id>/*.part` with `Range`/`If-Range` resume → MD5 → rename → install worker identifies the payload by **byte signature** (`install/inspect.rs`), then installer/archive/portable branch into `<library>/<title>`.
 
+Torrents: `enqueue_torrent` stores one `Source::Torrent` file row (`source_kind = 'torrent'`, `option_id` = the info hash or the `.torrent` address) and `run_one` hands it to `downloads/torrent.rs`, which reads the metadata first (checking every path), downloads it in one session and finishes with `InstallState::Manual` — torrent content is never unpacked or run.
+
 Frontend data flow: Rust emits Tauri event → `listen` wrapper in `src/lib/api.ts` → `src/hooks/useSyncEvents.ts` / `useDownloadEvents.ts` (each mounted once, in `App.tsx`) → React Query cache (`setQueryData` for hot fields, `invalidateQueries` for cold) → components re-render. No component calls `listen()` directly.
 
 Event names (constants declared in the emitting core module, mirrored in `src/lib/api.ts`): `sync:progress`, `sync:finished`, `download:progress`, `download:state`, `install:progress`, `install:changed`.
@@ -63,7 +65,7 @@ Event names (constants declared in the emitting core module, mirrored in `src/li
 | `crates/gamelib-core/src/` | Domain: `app.rs` (command surface), `sync.rs`, `new_releases.rs`, `steam/`, `stores/`, `db/`, `downloads/`, `install/`, `links/`, `model.rs`, `record.rs`, `secrets.rs`, `error.rs`, `http.rs` |
 | `crates/gamelib-core/tests/` | Integration tests + `common/` fakes + `fixtures/*.json` |
 | `crates/gamelib-cli/src/` | `main.rs` (hand-rolled arg parsing, 10 subcommands), `serve.rs` (loopback HTTP + SSE) |
-| `src-tauri/src/` | `lib.rs` (plugins, state, `invoke_handler`), `commands.rs`, `login.rs` (incognito GOG login window), `error.rs` (`pub use gamelib_core::ErrorInfo as CmdError`) |
+| `src-tauri/src/` | `lib.rs` (plugins, state, `invoke_handler`), `commands.rs`, `browser.rs` (in-app browser window: navigation toolbar, magnet/`.torrent` capture), `login.rs` (incognito GOG login window), `error.rs` (`pub use gamelib_core::ErrorInfo as CmdError`) |
 | `src/lib/` | Pure TS: `api.ts` (only Tauri boundary), `types.ts` (mirrors `model.rs`), `queryClient.ts`, `format.ts`, `fold.ts`, `grid.ts`, `toast.ts` |
 | `src/hooks/` | `useData.ts` (all React Query hooks), `useFilters.ts` (view/filter state → `BaseQuery`), `useGameWindow.ts`, `useSyncEvents.ts`, `useDownloadEvents.ts` |
 | `src/components/` | Shell (`App.tsx` is the only view switcher), grid, dialogs, views; shared atoms in `ui.tsx`/`badges.tsx`/`icons.tsx` |
@@ -154,7 +156,7 @@ CI (`.github/workflows/build.yml`): `check` (ubuntu) and `check-windows` run for
 ## Runtime/Tooling Preferences
 
 - **pnpm only** (no npm/yarn lockfiles); Node 22.12+; `pnpm-lock.yaml` is `lockfileVersion 9.0` with `autoInstallPeers` — CI enforces `--frozen-lockfile`.
-- **Rust ≥ 1.90, edition 2024.** No `rust-toolchain.toml`, no `.cargo/config.toml`; CI pins `RUST_TOOLCHAIN=1.94.1`. Workspace deps are declared once in the root `Cargo.toml` and inherited via `.workspace = true`.
+- **Rust ≥ 1.90, edition 2024.** No `rust-toolchain.toml`, no `.cargo/config.toml`; CI pins `RUST_TOOLCHAIN=1.94.1`. Workspace deps are declared once in the root `Cargo.toml` and inherited via `.workspace = true`. The torrent engine (`librqbit`, Apache-2.0) and its Tokio runtime are core dependencies, used only by `downloads/torrent.rs`.
 - **No ESLint / no TS lint step.** The TS gate is `tsc` inside `pnpm build` (strict, `noUnusedLocals`/`noUnusedParameters` → dead code fails the build). Prettier (`printWidth: 140`) covers only `src index.html vite.config.ts`.
 - Tailwind CSS v4 via `@tailwindcss/vite`; no `tailwind.config.*` — all tokens live in `src/index.css` `@theme`.
 - Vite dev server pins port 1420 and ignores `src-tauri/`, `crates/`, `target/`; env prefixes `VITE_`, `TAURI_ENV_`.

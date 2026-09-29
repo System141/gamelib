@@ -47,13 +47,16 @@ Artifacts 7 gün saklanır. Windows paketi, son commit mesajında `[installer]` 
 - **İndirme ve kurulum:**
   - GOG'da sahip olduğun ve itch.io'da sahip olduğun ya da ücretsiz olan oyunlar "İndir" ile indirilir. Bilgisayarına uygun dosya (ör. Windows, Türkçe) önceden seçili gelir.
   - İndirmeler sıraya girer, duraklatılıp sürdürülebilir, uygulama kapansa bile kaldığı yerden devam eder. GOG dosyaları MD5 ile doğrulanır.
+  - **Torrent:** Elle eklediğin magnet bağlantıları ve `.torrent` dosyaları aynı kuyrukta iner (uygulamanın kendi BitTorrent motoruyla). Bitince dosyalar indirme klasöründe kalır; GameLib bunları kurmaz ya da çalıştırmaz.
   - İndirme bitince kurulum kendiliğinden başlar; ardından "Oyna", oyun klasörü ve "Kaldır" kullanılabilir. Ayrıntılar: [İndirme ve kurulum](#indirme-ve-kurulum).
 - **Otomatik güncelleme:** Uygulama yeni sürümleri GitHub'dan bulur, imzasını doğrular ve onayınla kurar.
 - **Steam dışı bağlantılar:**
   - Her oyuna elle bağlantı eklenebilir, düzenlenebilir ve silinebilir.
-  - "Kontrol et" bağlantının yönlendirmelerini izler ve son adresi, dosya adını, türünü ve boyutunu gösterir; dosyayı indirmez.
-  - Bu bağlantılar varsayılan tarayıcıda açılır; uygulamanın içinden indirme yalnızca GOG ve itch.io için yapılır.
+  - "Kontrol et" bağlantının yönlendirmelerini izler ve son adresi, dosya adını, türünü ve boyutunu gösterir; dosyayı indirmez. İzlenen her adım (yönlendirme zinciri) ve son yanıtın durumu satırda görünür: çalışıyor, erişim kısıtlı (401/403/429), bulunamadı (404/410) ya da sunucu hatası (5xx).
+  - Kayıtlı bir sonuç 7 günden eskiyse o oyunun detayı açıldığında bağlantılar kendiliğinden yeniden denetlenir; "Tümünü denetle" aynı denetimi tek tuşla bütün bağlantılar için sırayla yapar.
+  - Bu bağlantılar varsayılan tarayıcıda açılır; uygulamanın içinden indirme yalnızca GOG ve itch.io için yapılır. Magnet (`magnet:`) bağlantıları tarayıcıda açılmaz: "İndirme sırasına ekle" ile aynı kuyruğa girer.
   - Her site için ayrı bir işleyici yazılabilir (bkz. [Yeni site işleyicisi ekleme](#yeni-site-işleyicisi-ekleme)).
+- **Uygulama içi tarayıcı:** Doğrulama adımı ya da giriş gerektiren sayfalar ayrı bir pencerede açılır. Pencerenin kendi araç çubuğu vardır (geri, ileri, yenile, adres); sayfada indirilen dosyalar tarayıcının indirme klasörüne değil GameLib'in kuyruğuna gider, magnet bağlantıları torrent olarak sıraya alınır.
 - **Yetişkin içerik** Steam'de olduğu gibi varsayılan olarak gizlidir; filtrelerden açılabilir.
 
 ![Steam dışı bağlantılar](docs/screenshots/links.jpg)
@@ -225,7 +228,7 @@ crates/gamelib-core/   Tauri'den bağımsız çekirdek: Steam istemcisi, SQLite,
   src/links/           URL doğrulama, site işleyicileri, yönlendirme kontrolü
   src/stores/          GOG kataloğu, GamesDB, eşleştirme, GOG ve itch.io hesapları
   src/secrets.rs       giriş bilgilerinin şifreli saklanması
-  src/downloads/       indirme kuyruğu: sürdürme, adres yenileme, MD5 doğrulama
+  src/downloads/       indirme kuyruğu: sürdürme, adres yenileme, MD5 doğrulama, torrent aktarımı
   src/install/         kurulum: dosya türü, arşivler, başlatılacak dosya, Windows'a özel kısımlar
 crates/gamelib-cli/    komut satırı aracı ve tarayıcı önizlemesi için yerel sunucu (src/serve.rs)
 src-tauri/             masaüstü kabuğu: komutlar, olaylar, pencere ve güvenlik ayarları
@@ -260,7 +263,9 @@ Her indirme sitesinin bağlantı yapısı ve yönlendirmeleri farklıdır. Bu y�
 
 ## Kapsam
 
-GameLib'in içinden indirme yalnızca lisanslı kaynaklardan yapılır: GOG'da satın aldığın oyunlar ve itch.io'da satın aldığın ya da geliştiricinin ücretsiz sunduğu oyunlar. Lisanssız kopya dağıtan siteler taranmaz, eşleştirilmez ve bunlardan indirme yapılmaz; torrent ve dosya barındırma sitelerinden indirme desteklenmez. Elle eklenen bağlantılar yalnızca tarayıcıda açılır.
+GameLib indirmeyi yalnızca senin seçtiğin kaynaklardan yapar: GOG'da satın aldığın oyunlar, itch.io'da satın aldığın ya da geliştiricinin ücretsiz sunduğu oyunlar, uygulama içi tarayıcıdan yakalanan HTTP(S) indirmeleri ve elle eklediğin magnet ya da `.torrent` bağlantıları. Hiçbir bağlantı kendiliğinden indirilmez; torrent indirmesi de ancak sen "İndirme sırasına ekle" dediğinde başlar. Lisanssız kopya dağıtan siteler taranmaz ve eşleştirilmez.
+
+Torrent indirmeleri uygulamanın kendi BitTorrent motoruyla (librqbit) yapılır; bitince dosyalar indirme klasöründe kalır, GameLib onları kurmaz ya da çalıştırmaz. GameLib indirdiği içeriğin lisansını, kaynağını ya da zararsızlığını doğrulamaz; hangi bağlantıyı indireceğini seçmek ve o içeriği indirme hakkına sahip olmak senin sorumluluğundadır. Kullanılan üçüncü taraf bileşenler ve lisansları: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Yol haritası
 

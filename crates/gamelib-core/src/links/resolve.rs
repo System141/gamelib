@@ -165,11 +165,7 @@ fn final_check(
     };
 
     LinkCheck {
-        status: if status.is_success() {
-            CheckStatus::Ok
-        } else {
-            CheckStatus::Broken
-        },
+        status: final_status(status),
         http_status: Some(status.as_u16()),
         final_url: Some(url.to_string()),
         final_host: url.host_str().map(str::to_owned),
@@ -202,6 +198,20 @@ fn failure(
         is_file: false,
         checked_at,
         message: Some(message),
+    }
+}
+
+/// The final response's status code as a user-facing kind — a refusal, a gone page or a server
+/// fault each suggest a different next step, so they are not collapsed into one "broken".
+fn final_status(code: StatusCode) -> CheckStatus {
+    if code.is_success() {
+        return CheckStatus::Ok;
+    }
+    match code.as_u16() {
+        401 | 403 | 429 => CheckStatus::Restricted,
+        404 | 410 => CheckStatus::NotFound,
+        500..=599 => CheckStatus::ServerError,
+        _ => CheckStatus::Broken,
     }
 }
 
@@ -264,6 +274,22 @@ fn sanitize_file_name(name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn final_statuses_map_to_kinds() {
+        assert_eq!(final_status(StatusCode::OK), CheckStatus::Ok);
+        assert_eq!(final_status(StatusCode::FORBIDDEN), CheckStatus::Restricted);
+        assert_eq!(final_status(StatusCode::NOT_FOUND), CheckStatus::NotFound);
+        assert_eq!(
+            final_status(StatusCode::INTERNAL_SERVER_ERROR),
+            CheckStatus::ServerError
+        );
+        assert_eq!(
+            final_status(StatusCode::NOT_MODIFIED),
+            CheckStatus::Broken,
+            "a 3xx that is not a redirect is still broken"
+        );
+    }
 
     #[test]
     fn parses_disposition_names() {

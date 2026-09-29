@@ -8,6 +8,7 @@
 //! Nothing here downloads or runs files: a check sends HEAD (or a 1-byte ranged GET) requests
 //! and reads headers, and opening a link hands it to the user's browser.
 
+pub mod find;
 pub mod registry;
 pub mod resolve;
 pub mod sites;
@@ -16,8 +17,10 @@ pub mod validate;
 use reqwest::Url;
 use reqwest::blocking::Client;
 
+use crate::Result;
 use crate::model::{LinkCheck, SiteInfo};
 
+pub use find::{FindQuery, FoundLink};
 pub use registry::SiteRegistry;
 
 pub trait SiteHandler: Send + Sync {
@@ -44,5 +47,11 @@ pub trait SiteHandler: Send + Sync {
     /// Follows the link to see where it ends up, without downloading it.
     fn resolve(&self, url: &Url, http: &Client) -> LinkCheck {
         resolve::follow_redirects(url, http)
+    }
+
+    /// Searches this site for a game and returns the links it offers. The default is no results:
+    /// only sites that can be searched implement this.
+    fn find(&self, _query: &FindQuery, _http: &Client) -> Result<Vec<FoundLink>> {
+        Ok(Vec::new())
     }
 }

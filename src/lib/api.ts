@@ -9,6 +9,7 @@ import type {
   DownloadProgress,
   DownloadRemoved,
   FileOption,
+  FoundLink,
   InstallChanged,
   Installed,
   InstallProgress,
@@ -78,6 +79,8 @@ export const api = {
   /** Desktop only: the preview server never downloads. */
   enqueueDownload: (store: Store, productId: string, optionId: string) =>
     invoke<Download>("enqueue_download", { store, productId, optionId }),
+  /** Desktop only: queues a magnet link or a `.torrent` address for this game. */
+  enqueueTorrent: (appid: number, title: string, source: string) => invoke<Download>("enqueue_torrent", { appid, title, source }),
   getDownloads: () => invoke<DownloadList>("get_downloads"),
   pauseDownload: (id: number) => invoke<void>("pause_download", { id }),
   resumeDownload: (id: number) => invoke<void>("resume_download", { id }),
@@ -97,10 +100,13 @@ export const api = {
   pickLaunchTarget: (store: Store, productId: string) => invoke<Installed | null>("pick_launch_target", { store, productId }),
   listSites: () => invoke<SiteInfo[]>("list_sites"),
   listLinks: (appid: number) => invoke<GameLink[]>("list_links", { appid }),
+  findLinks: (appid: number) => invoke<FoundLink[]>("find_links", { appid }),
   saveLink: (input: LinkInput) => invoke<GameLink>("save_link", { input }),
   deleteLink: (id: number) => invoke<boolean>("delete_link", { id }),
   checkLink: (id: number) => invoke<LinkCheck>("check_link", { id }),
   openLink: (id: number) => invoke<void>("open_link", { id }),
+  /** Desktop only: the in-app browser; anything downloaded there is queued for this game. */
+  openBrowser: (appid: number, title: string, url: string) => invoke<void>("open_browser", { appid, title, url }),
   openInSteam: (appid: number, target: "web" | "client" | "install") => invoke<void>("open_in_steam", { appid, target }),
 };
 

@@ -1,7 +1,19 @@
 // All user-facing text. Game data (names, English descriptions) comes from Steam as-is.
 
 import { formatNumber, formatRelative } from "../lib/format";
-import type { CheckStatus, CmdError, DeckCompat, DownloadState, InstallMethod, MatchMethod, SortKey, Store, SyncPhase } from "../lib/types";
+import type {
+  AccountStore,
+  CheckStatus,
+  CmdError,
+  DeckCompat,
+  DownloadSourceKind,
+  DownloadState,
+  InstallMethod,
+  MatchMethod,
+  SortKey,
+  Store,
+  SyncPhase,
+} from "../lib/types";
 
 const n = formatNumber;
 
@@ -65,6 +77,10 @@ export const tr = {
     retry: "Yeniden dene",
     manual: "Elle kurulmalı",
     manualHint: (kind: string | null) => {
+      // A torrent's files are the game itself; there is no installer to run.
+      if (kind === "torrent") {
+        return "Torrent içeriğini GameLib kurmaz; klasörü açıp dosyaları kendin kullanabilirsin.";
+      }
       const what =
         kind === "rar"
           ? "RAR arşivlerini"
@@ -182,6 +198,17 @@ export const tr = {
     noResults: "Aramana uyan indirme yok.",
     toastDone: (title: string) => `${title} indirildi`,
     toastFailed: (title: string) => `${title} indirilemedi`,
+    /** Where the bytes come from, shown on every row. */
+    sources: {
+      http: "HTTP",
+      torrent: "BitTorrent",
+    } satisfies Record<DownloadSourceKind, string>,
+    sourceHint: {
+      http: "Doğrudan indirme",
+      torrent: "Torrent ağından indirme",
+    } satisfies Record<DownloadSourceKind, string>,
+    toastTorrentQueued: (title: string) => `${title} torrent sırasına eklendi`,
+    toastTorrentRejected: "Bu torrent bağlantısı kullanılamıyor.",
   },
   accounts: {
     title: "Hesaplar",
@@ -224,6 +251,7 @@ export const tr = {
   storeNames: {
     gog: "GOG",
     itch: "itch.io",
+    web: "Web",
   } satisfies Record<Store, string>,
   search: {
     placeholder: "Oyun ara…",
@@ -321,12 +349,27 @@ export const tr = {
   },
   links: {
     title: "Steam dışı bağlantılar",
-    hint: "Başka sitelerdeki sayfaları ya da indirme bağlantılarını buraya ekleyebilirsin. Bu bağlantılar varsayılan tarayıcında açılır; uygulamanın içinden indirme yalnızca GOG ve itch.io için yapılır.",
+    hint: "Başka sitelerdeki sayfaları ya da indirme bağlantılarını buraya ekleyebilirsin. Bağlantılar varsayılan tarayıcında açılır; doğrulama gerektiren sayfalar uygulamanın içindeki tarayıcı penceresinde açılır ve oradan indirdiğin dosya kuyruğa girer. Magnet bağlantıları tarayıcıda açılmaz, indirme kuyruğunda torrent olarak iner.",
     empty: "Bu oyun için henüz bağlantı eklenmedi.",
     add: "Bağlantı ekle",
+    addFound: "Ekle",
+    findSources: "Kaynaklarda ara",
+    searching: "Aranıyor...",
+    noSources: "Bu oyun kaynaklarda bulunamadı",
+    direct: "Doğrudan",
+    magnet: "Torrent (magnet)",
+    addToQueue: "İndirme sırasına ekle",
+    needsBrowser: "Tarayıcı gerekir",
     open: "Aç",
+    openInBrowser: "Uygulamada aç",
     check: "Kontrol et",
     checking: "Kontrol ediliyor…",
+    checkAll: "Tümünü denetle",
+    checkingAll: (done: number, total: number) => `Denetleniyor ${done}/${total}`,
+    stale: "Denetim eskidi",
+    chain: "Yönlendirme zinciri",
+    toastChecked: (n: number) => `${n} bağlantı denetlendi`,
+    toastCheckFailed: (n: number) => `${n} bağlantı denetlenemedi`,
     edit: "Düzenle",
     delete: "Sil",
     confirmDelete: "Bu bağlantı silinsin mi?",
@@ -346,6 +389,7 @@ export const tr = {
       urlPlaceholder: "https://…",
       detected: (site: string, host: string) => `Algılanan site: ${site} · ${host}`,
       insecureWarning: "Bu bağlantı şifrelenmemiş (http). Mümkünse https kullan.",
+      magnetHint: "Magnet bağlantıları tarayıcıda açılmaz; uygulamanın indirme kuyruğunda indirilir.",
       label: "Etiket",
       labelPlaceholder: "Örn. Windows kurulumu",
       kind: "Tür",
@@ -370,7 +414,7 @@ export const tr = {
     none: "Başka bir mağazada bulunamadı.",
     notSynced: "Mağazalar henüz eşleştirilmedi.",
     syncCta: "Mağazaları eşleştir",
-    openIn: { gog: "GOG'da aç", itch: "itch.io'da aç" } satisfies Record<Store, string>,
+    openIn: { gog: "GOG'da aç", itch: "itch.io'da aç" } satisfies Record<AccountStore, string>,
     owned: "Sahipsin",
     free: "Ücretsiz",
     method: {
@@ -410,6 +454,9 @@ export const tr = {
   checkStatus: {
     ok: "Çalışıyor",
     broken: "Bozuk",
+    restricted: "Erişim kısıtlı",
+    not_found: "Bulunamadı",
+    server_error: "Sunucu hatası",
     loop: "Yönlendirme döngüsü",
     too_many_redirects: "Çok fazla yönlendirme",
     timeout: "Zaman aşımı",
@@ -577,6 +624,8 @@ const INVALID_CODES: Record<string, string> = {
   update_missing: "GitHub'daki son yayında güncelleme bilgisi (latest.json) bulunamadı.",
   update_platform: "Yeni sürüm bu sistem ya da paket türü için yayımlanmamış.",
   version: "Geçersiz sürüm numarası.",
+  torrent_parse: "Bu bir magnet ya da .torrent bağlantısı değil. Bilgi özetini (btih) içeren bir magnet bağlantısı yapıştır.",
+  torrent_path: "Torrent'in dosya listesi bu bilgisayara yazılamayacak yollar içeriyor; güvenlik için indirilmedi.",
   store: "Bu mağazada arama yapılamıyor.",
 };
 

@@ -1,23 +1,65 @@
 // "Steam dışı bağlantılar": user-added links to other stores, official sites or downloads.
 
 import clsx from "clsx";
-import { CircleCheck, CircleX, ExternalLink, Globe, Link2, LoaderCircle, Pencil, Plus, Radar, ShieldAlert, Trash } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import {
+  CircleCheck,
+  CircleX,
+  Download,
+  ExternalLink,
+  Globe,
+  Link2,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  Radar,
+  Search,
+  ShieldAlert,
+  Trash,
+} from "lucide-react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
-import { fileKind, formatBytes, formatRelative } from "../lib/format";
+import { fileKind, formatBytes, formatRelative, isRecent } from "../lib/format";
 import { showToast } from "../lib/toast";
-import type { GameLink, LinkKind, Platform, SiteInfo } from "../lib/types";
-import { useCheckLink, useDeleteLink, useLinks, useSaveLink, useSites } from "../hooks/useData";
+import type { FoundLink, GameLink, LinkInput, LinkKind, Platform, SiteInfo } from "../lib/types";
+import { useCheckLink, useDeleteLink, useEnqueueTorrent, useFindLinks, useLinks, useSaveLink, useSites } from "../hooks/useData";
 import { AppleIcon, LinuxIcon, WindowsIcon } from "./icons";
 import { SmallButton } from "./ui";
 
-export function LinksSection({ appid }: { appid: number }) {
+/** A check older than this is refreshed automatically when the dialog opens. */
+const STALE_DAYS = 7;
+
+/** Torrent links are not pages: they are handed to the download queue instead of a browser. */
+function isMagnet(url: string): boolean {
+  return url.trim().toLowerCase().startsWith("magnet:");
+}
+
+export function LinksSection({ appid, gameTitle }: { appid: number; gameTitle: string }) {
   const links = useLinks(appid);
   const sites = useSites();
+  const find = useFindLinks();
   const [editing, setEditing] = useState<GameLink | "new" | null>(null);
+  const [found, setFound] = useState<FoundLink[] | null>(null);
   const siteById = useMemo(() => new Map((sites.data ?? []).map((s) => [s.id, s])), [sites.data]);
   const list = links.data ?? [];
+  const { run, progress } = useBulkCheck();
+  const autoRan = useRef(false);
+  // A magnet link has no page to follow, so it is never checked.
+  const checkable = list.filter((l) => !isMagnet(l.url));
+  const stale = checkable.filter((l) => !l.lastCheck || !isRecent(l.lastCheck.checkedAt, STALE_DAYS));
+
+  const search = () =>
+    find.mutate(appid, {
+      onSuccess: (results) => setFound(results),
+      onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }),
+    });
+
+  // Re-check everything older than the window, once per dialog open; `autoRan` resets on unmount.
+  useEffect(() => {
+    if (autoRan.current || !links.isSuccess || stale.length === 0) return;
+    autoRan.current = true;
+    void run(stale);
+  }, [links.isSuccess, stale.length]);
 
   return (
     <section>
@@ -27,18 +69,54 @@ export function LinksSection({ appid }: { appid: number }) {
           {tr.links.title}
           {list.length > 0 && <span className="rounded-full bg-white/8 px-2 text-xs font-medium text-ink-300">{list.length}</span>}
         </h3>
-        {editing == null && (
-          <button
-            type="button"
-            onClick={() => setEditing("new")}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-accent/12 px-3 text-sm font-medium text-accent-soft ring-1 ring-accent/30 transition hover:bg-accent/20"
+        <div className="flex items-center gap-2">
+          {editing == null && (
+            <button
+              type="button"
+              onClick={() => setEditing("new")}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-accent/12 px-3 text-sm font-medium text-accent-soft ring-1 ring-accent/30 transition hover:bg-accent/20"
+            >
+              <Plus size={15} />
+              {tr.links.add}
+            </button>
+          )}
+          <SmallButton
+            onClick={search}
+            disabled={find.isPending}
+            title={tr.links.findSources}
+            ariaLabel={tr.links.findSources}
+            icon={find.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <Search size={13} />}
           >
-            <Plus size={15} />
-            {tr.links.add}
-          </button>
-        )}
+            {find.isPending ? tr.links.searching : tr.links.findSources}
+          </SmallButton>
+          {checkable.length > 0 && (
+            <SmallButton
+              onClick={() => void run(checkable)}
+              disabled={progress != null}
+              icon={progress ? <LoaderCircle size={13} className="animate-spin" /> : <Radar size={13} />}
+            >
+              {progress ? tr.links.checkingAll(progress.done, progress.total) : tr.links.checkAll}
+            </SmallButton>
+          )}
+        </div>
       </div>
       <p className="mb-4 text-[13px] leading-relaxed text-ink-400">{tr.links.hint}</p>
+
+      {found != null && (
+        <div className="mb-4">
+          {found.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-ink-400">
+              {tr.links.noSources}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {found.map((f) => (
+                <FoundLinkRow key={`${f.siteId}-${f.url}`} appid={appid} gameTitle={gameTitle} found={f} site={siteById.get(f.siteId)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {editing != null && (
         <LinkForm appid={appid} link={editing === "new" ? null : editing} siteById={siteById} onDone={() => setEditing(null)} />
@@ -47,7 +125,7 @@ export function LinksSection({ appid }: { appid: number }) {
       <div className="space-y-2">
         {list.map((link) =>
           editing !== "new" && editing?.id === link.id ? null : (
-            <LinkRow key={link.id} link={link} site={siteById.get(link.siteId)} onEdit={() => setEditing(link)} />
+            <LinkRow key={link.id} link={link} site={siteById.get(link.siteId)} gameTitle={gameTitle} onEdit={() => setEditing(link)} />
           ),
         )}
         {links.isSuccess && list.length === 0 && editing == null && (
@@ -69,15 +147,34 @@ function PlatformGlyph({ platform }: { platform: Platform | null }) {
   return null;
 }
 
-function LinkRow({ link, site, onEdit }: { link: GameLink; site: SiteInfo | undefined; onEdit: () => void }) {
+function LinkRow({ link, site, gameTitle, onEdit }: { link: GameLink; site: SiteInfo | undefined; gameTitle: string; onEdit: () => void }) {
   const check = useCheckLink();
   const remove = useDeleteLink();
+  const queue = useEnqueueTorrent();
   const [confirming, setConfirming] = useState(false);
   const color = site?.color ?? "#8b93a7";
   const last = link.lastCheck;
   const ok = last?.status === "ok";
+  const stale = last != null && !isRecent(last.checkedAt, STALE_DAYS);
+  const magnet = isMagnet(link.url);
+  // A browser-required site only hands the download out after a click-through, so its pages
+  // open in the in-app browser, which queues whatever is downloaded there for this game.
+  const browserRequired = site?.browserRequired === true;
 
-  const open = () => api.openLink(link.id).catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
+  const open = () =>
+    (browserRequired ? api.openBrowser(link.appid, gameTitle, link.url) : api.openLink(link.id)).catch((e) =>
+      showToast({ tone: "error", title: errorText(toCmdError(e)) }),
+    );
+
+  // A magnet link has no page to check or open: it goes into the download queue.
+  const enqueue = () =>
+    queue.mutate(
+      { appid: link.appid, title: gameTitle, source: link.url },
+      {
+        onSuccess: () => showToast({ tone: "success", title: tr.downloads.toastTorrentQueued(gameTitle) }),
+        onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }),
+      },
+    );
 
   return (
     <div className="group rounded-xl bg-ink-800/80 p-3.5 ring-1 ring-white/6 transition hover:ring-white/12">
@@ -96,6 +193,12 @@ function LinkRow({ link, site, onEdit }: { link: GameLink; site: SiteInfo | unde
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="truncate font-medium text-ink-50">{link.label ?? link.host}</span>
             <span className="rounded-md bg-white/6 px-1.5 py-0.5 text-[11px] font-medium text-ink-300">{tr.links.kinds[link.kind]}</span>
+            {magnet && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-violet/15 px-1.5 py-0.5 text-[11px] font-medium text-violet">
+                <Download size={12} />
+                {tr.links.magnet}
+              </span>
+            )}
             {link.platform && (
               <span className="inline-flex items-center gap-1 rounded-md bg-white/6 px-1.5 py-0.5 text-[11px] text-ink-300">
                 <PlatformGlyph platform={link.platform} />
@@ -124,6 +227,9 @@ function LinkRow({ link, site, onEdit }: { link: GameLink; site: SiteInfo | unde
                   {tr.checkStatus[last.status]}
                   {last.httpStatus ? ` (${last.httpStatus})` : ""}
                 </span>
+                {stale && (
+                  <span className="rounded-md bg-warning/12 px-1.5 py-0.5 text-[11px] font-medium text-warning">{tr.links.stale}</span>
+                )}
                 {ok && (
                   <span className="text-ink-300">
                     {last.isFile
@@ -141,10 +247,23 @@ function LinkRow({ link, site, onEdit }: { link: GameLink; site: SiteInfo | unde
                 <span className="text-ink-500">·</span>
                 <span className="text-ink-500">{tr.links.checkedAgo(formatRelative(last.checkedAt))}</span>
               </>
-            ) : (
+            ) : magnet ? null : (
               <span className="text-ink-500">{tr.links.notChecked}</span>
             )}
           </div>
+          {last && last.hops.length > 1 && (
+            <div className="mt-1 flex flex-wrap items-center gap-1 text-[11.5px] text-ink-400">
+              <span className="text-ink-500">{tr.links.chain}:</span>
+              {last.hops.map((hop, i) => (
+                <span key={`${hop.url}-${i}`} className="inline-flex items-center gap-1">
+                  {i > 0 && <span className="text-ink-600">→</span>}
+                  <span title={hop.url} className={clsx("rounded bg-white/6 px-1 py-0.5", i === last.hops.length - 1 && "text-ink-200")}>
+                    {hostOf(hop.url)?.host ?? hop.url} ({hop.status})
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
           {last?.fileName && ok && <div className="mt-1 truncate font-mono text-[11.5px] text-ink-400">{last.fileName}</div>}
         </div>
       </div>
@@ -174,18 +293,156 @@ function LinkRow({ link, site, onEdit }: { link: GameLink; site: SiteInfo | unde
             <SmallButton onClick={onEdit} icon={<Pencil size={13} />}>
               {tr.links.edit}
             </SmallButton>
-            <SmallButton
-              onClick={() => check.mutate(link, { onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }) })}
-              disabled={check.isPending}
-              icon={check.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <Radar size={13} />}
-            >
-              {check.isPending ? tr.links.checking : tr.links.check}
-            </SmallButton>
-            <SmallButton tone="primary" onClick={open} icon={<ExternalLink size={13} />}>
-              {tr.links.open}
-            </SmallButton>
+            {/* A magnet link is never checked: its address is the download itself. */}
+            {!magnet && (
+              <SmallButton
+                onClick={() => check.mutate(link, { onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }) })}
+                disabled={check.isPending}
+                icon={check.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <Radar size={13} />}
+              >
+                {check.isPending ? tr.links.checking : tr.links.check}
+              </SmallButton>
+            )}
+            {magnet ? (
+              <SmallButton
+                tone="primary"
+                onClick={enqueue}
+                disabled={queue.isPending}
+                icon={queue.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <Download size={13} />}
+              >
+                {tr.links.addToQueue}
+              </SmallButton>
+            ) : browserRequired ? (
+              <SmallButton tone="primary" onClick={open} icon={<Globe size={13} />}>
+                {tr.links.openInBrowser}
+              </SmallButton>
+            ) : (
+              <SmallButton tone="primary" onClick={open} icon={<ExternalLink size={13} />}>
+                {tr.links.open}
+              </SmallButton>
+            )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** A link a site search turned up, offered for the user to save or use. */
+function FoundLinkRow({
+  appid,
+  gameTitle,
+  found,
+  site,
+}: {
+  appid: number;
+  gameTitle: string;
+  found: FoundLink;
+  site: SiteInfo | undefined;
+}) {
+  const save = useSaveLink();
+  const queue = useEnqueueTorrent();
+  const color = site?.color ?? "#8b93a7";
+  const input: LinkInput = { appid, url: found.url, label: found.label, kind: found.kind, version: found.version, notes: found.notes };
+  const magnet = isMagnet(found.url);
+
+  const add = () =>
+    save.mutate(input, {
+      onSuccess: () => showToast({ tone: "success", title: tr.links.toastSaved }),
+      onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }),
+    });
+
+  // A found link is not saved yet, and only saved links can be opened by id, so opening saves it.
+  const open = () =>
+    save.mutate(input, {
+      onSuccess: (link) => {
+        api.openLink(link.id).catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
+      },
+      onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }),
+    });
+
+  // Nothing to open: the magnet link goes into the download queue as it is.
+  const enqueue = () =>
+    queue.mutate(
+      { appid, title: gameTitle, source: found.url },
+      {
+        onSuccess: () => showToast({ tone: "success", title: tr.downloads.toastTorrentQueued(gameTitle) }),
+        onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }),
+      },
+    );
+
+  // A page that needs a click-through opens in the in-app browser, where the download is
+  // captured for the game the window is showing.
+  const openInBrowser = () =>
+    api.openBrowser(appid, gameTitle, found.url).catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
+
+  return (
+    <div className="rounded-xl bg-ink-800/80 p-3.5 ring-1 ring-white/6">
+      <div className="flex items-start gap-3">
+        <span
+          className="grid size-10 shrink-0 place-items-center rounded-lg text-sm font-bold text-ink-950"
+          style={{ background: `linear-gradient(135deg, ${color}, color-mix(in oklab, ${color} 55%, #0b0f16))` }}
+          title={siteName(site, found.siteId)}
+        >
+          {found.label.charAt(0).toUpperCase() || <Globe size={16} />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate font-medium text-ink-50">{found.label}</span>
+            <span className="rounded-md bg-white/6 px-1.5 py-0.5 text-[11px] font-medium text-ink-300">{tr.links.kinds[found.kind]}</span>
+            {magnet ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-violet/15 px-1.5 py-0.5 text-[11px] font-medium text-violet">
+                <Download size={12} />
+                {tr.links.magnet}
+              </span>
+            ) : (
+              found.direct && (
+                <span className="rounded-md bg-accent/12 px-1.5 py-0.5 text-[11px] font-medium text-accent-soft">{tr.links.direct}</span>
+              )
+            )}
+            {found.needsBrowser && (
+              <span className="rounded-md bg-warning/12 px-1.5 py-0.5 text-[11px] font-medium text-warning">{tr.links.needsBrowser}</span>
+            )}
+          </div>
+          <div className="mt-0.5 truncate text-xs text-ink-400" title={found.url}>
+            {siteName(site, found.siteId)} · {found.url}
+          </div>
+          {(found.version || found.size) && (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-ink-400">
+              {found.version && <span>v{found.version.replace(/^v/i, "")}</span>}
+              {found.size && <span>{found.size}</span>}
+            </div>
+          )}
+          {found.notes && <p className="mt-1.5 text-[13px] text-ink-300">{found.notes}</p>}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
+        {magnet ? (
+          <SmallButton
+            tone="primary"
+            onClick={enqueue}
+            disabled={queue.isPending}
+            icon={queue.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <Download size={13} />}
+          >
+            {tr.links.addToQueue}
+          </SmallButton>
+        ) : found.needsBrowser ? (
+          <SmallButton onClick={openInBrowser} icon={<Globe size={13} />}>
+            {tr.links.openInBrowser}
+          </SmallButton>
+        ) : (
+          <SmallButton onClick={open} icon={<ExternalLink size={13} />}>
+            {tr.links.open}
+          </SmallButton>
+        )}
+        <SmallButton
+          tone="primary"
+          onClick={add}
+          disabled={save.isPending}
+          icon={save.isPending ? <LoaderCircle size={13} className="animate-spin" /> : <Plus size={13} />}
+        >
+          {tr.links.addFound}
+        </SmallButton>
       </div>
     </div>
   );
@@ -201,6 +458,36 @@ function hostOf(input: string): { host: string; insecure: boolean } | null {
   } catch {
     return null;
   }
+}
+
+/** Checks a set of links one at a time, so a slow or dead host cannot stall the rest. */
+function useBulkCheck() {
+  const check = useCheckLink();
+  const running = useRef(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const run = async (targets: GameLink[]) => {
+    if (running.current || targets.length === 0) return;
+    running.current = true;
+    setProgress({ done: 0, total: targets.length });
+    let failed = 0;
+    for (const link of targets) {
+      try {
+        await check.mutateAsync(link);
+      } catch {
+        failed += 1;
+      }
+      setProgress((p) => (p ? { done: p.done + 1, total: p.total } : p));
+    }
+    setProgress(null);
+    running.current = false;
+    showToast({
+      tone: failed > 0 ? "error" : "success",
+      title: failed > 0 ? tr.links.toastCheckFailed(failed) : tr.links.toastChecked(targets.length),
+    });
+  };
+
+  return { run, progress };
 }
 
 function LinkForm({
@@ -222,6 +509,7 @@ function LinkForm({
   const [version, setVersion] = useState(link?.version ?? "");
   const [notes, setNotes] = useState(link?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
+  const magnet = isMagnet(url);
   const preview = hostOf(url);
   // Site detection happens in Rust; until saved, show the generic site for the typed host.
   const detected = link && preview?.host === link.host ? siteName(siteById.get(link.siteId), link.siteId) : tr.links.sites.generic;
@@ -258,11 +546,11 @@ function LinkForm({
           spellCheck={false}
         />
       </label>
-      {preview && (
+      {(preview || magnet) && (
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-400">
           <Globe size={12} />
-          {tr.links.form.detected(detected, preview.host)}
-          {preview.insecure && (
+          {magnet ? tr.links.form.detected(tr.links.sites.generic, "magnet") : tr.links.form.detected(detected, preview!.host)}
+          {preview?.insecure && (
             <span className="inline-flex items-center gap-1 text-warning">
               <ShieldAlert size={12} />
               {tr.links.form.insecureWarning}
@@ -270,6 +558,7 @@ function LinkForm({
           )}
         </div>
       )}
+      {magnet && <p className="mt-1 text-xs text-ink-500">{tr.links.form.magnetHint}</p>}
 
       <div className="mt-3 grid grid-cols-2 gap-3">
         <label className="block">

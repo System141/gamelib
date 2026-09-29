@@ -154,6 +154,8 @@ export function Pill({ children, className }: { children: ReactNode; className?:
 const STORE_STYLE: Record<Store, { letter: string; className: string }> = {
   gog: { letter: "G", className: "bg-gog/15 text-gog ring-gog/35" },
   itch: { letter: "i", className: "bg-itch/15 text-itch ring-itch/35" },
+  // Downloads captured from the in-app browser: no store of their own.
+  web: { letter: "W", className: "bg-white/8 text-ink-200 ring-white/15" },
 };
 
 /** Small square store mark (the stores' own logos are trademarks, so a lettermark stands in). */
@@ -170,6 +172,13 @@ export function StoreMark({ store, size = 20, className }: { store: Store; size?
   );
 }
 
+/** Pill colours, mirroring the store marks. */
+const STORE_PILL_TONE: Record<Store, string> = {
+  gog: "text-gog ring-gog/40",
+  itch: "text-itch ring-itch/40",
+  web: "text-ink-200 ring-white/20",
+};
+
 /** Store name pill used on cards and in the detail view. */
 export function StorePill({ store, className }: { store: Store; className?: string }) {
   return (
@@ -177,7 +186,8 @@ export function StorePill({ store, className }: { store: Store; className?: stri
       className={clsx(
         // No `uppercase`: with lang="tr" it would turn "itch.io" into "İTCH.IO".
         "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wide ring-1 backdrop-blur",
-        store === "gog" ? "bg-ink-950/80 text-gog ring-gog/40" : "bg-ink-950/80 text-itch ring-itch/40",
+        "bg-ink-950/80",
+        STORE_PILL_TONE[store],
         className,
       )}
     >

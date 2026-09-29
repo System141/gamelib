@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"C:\\Users\\thesy\\OneDrive\\ArrowBackup\\Belgeler\\Projeler\\gamelib\"; $ProgressPreference='SilentlyContinue'; try { $r = Invoke-WebRequest -Uri \"https://ankergames.net/\" -UserAgent \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36\" -TimeoutSec 30; Write-Output \"STATUS: $($r.StatusCode)\"; Write-Output \"LEN: $($r.Content.Length)\"; $r.Content | Out-File -Encoding utf8 \"$env:TEMP\\ag.html\" } catch { Write-Output \"ERR: $($_.Exception.Message)\" })"
+    ]
+  }
+}

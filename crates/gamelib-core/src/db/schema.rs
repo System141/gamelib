@@ -251,7 +251,24 @@ CREATE TABLE installs(
 ) WITHOUT ROWID;
 "#;
 
-const MIGRATIONS: &[&str] = &[MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4];
+const MIGRATION_5: &str = r#"
+-- The redirect chain behind a link check, as a JSON array of {url, status}.
+ALTER TABLE game_links ADD COLUMN hops TEXT;
+"#;
+
+/// Where a download's bytes come from (`http` or `torrent`); older rows are HTTP transfers.
+const MIGRATION_6: &str = r#"
+ALTER TABLE downloads ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'http';
+"#;
+
+const MIGRATIONS: &[&str] = &[
+    MIGRATION_1,
+    MIGRATION_2,
+    MIGRATION_3,
+    MIGRATION_4,
+    MIGRATION_5,
+    MIGRATION_6,
+];
 
 /// Schema version this build expects.
 pub const SCHEMA_VERSION: usize = MIGRATIONS.len();

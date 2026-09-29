@@ -4,7 +4,8 @@ use reqwest::Url;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::links::SiteRegistry;
-use crate::links::validate::{is_insecure, optional_text, parse_link_url};
+use crate::links::sites::generic::GENERIC_SITE_ID;
+use crate::links::validate::{is_insecure, optional_text, parse_link_url, parse_magnet_url};
 use crate::model::{
     CheckStatus, GameLink, LinkCheck, LinkCheckSummary, LinkInput, LinkKind, Platform,
 };
@@ -15,10 +16,11 @@ pub const MAX_VERSION_CHARS: usize = 60;
 pub const MAX_NOTES_CHARS: usize = 1000;
 
 const COLUMNS: &str = "id, appid, site_id, url, label, kind, platform, version, notes, check_status, http_status,
-  resolved_url, final_host, redirects, file_name, size_bytes, content_type, is_file, checked_at, created_at, updated_at";
+  resolved_url, final_host, redirects, file_name, size_bytes, content_type, is_file, checked_at, created_at, updated_at, hops";
 
 fn link_from_row(row: &Row<'_>) -> rusqlite::Result<GameLink> {
     let url: String = row.get(3)?;
+    let magnet = url.trim_start().to_ascii_lowercase().starts_with("magnet:");
     let parsed = Url::parse(&url).ok();
     let kind: String = row.get(5)?;
     let platform: Option<String> = row.get(6)?;
@@ -30,6 +32,10 @@ fn link_from_row(row: &Row<'_>) -> rusqlite::Result<GameLink> {
             resolved_url: row.get(11)?,
             final_host: row.get(12)?,
             redirects: row.get::<_, Option<u32>>(13)?.unwrap_or(0),
+            hops: row
+                .get::<_, Option<String>>(21)?
+                .and_then(|raw| serde_json::from_str(&raw).ok())
+                .unwrap_or_default(),
             file_name: row.get(14)?,
             size_bytes: row
                 .get::<_, Option<i64>>(15)?
@@ -44,12 +50,17 @@ fn link_from_row(row: &Row<'_>) -> rusqlite::Result<GameLink> {
         id: row.get(0)?,
         appid: row.get(1)?,
         site_id: row.get(2)?,
-        host: parsed
-            .as_ref()
-            .and_then(|u| u.host_str())
-            .unwrap_or_default()
-            .to_owned(),
-        insecure: parsed.as_ref().is_some_and(is_insecure),
+        // A magnet link has no host: the UI shows "magnet" where other links show theirs.
+        host: if magnet {
+            "magnet".to_owned()
+        } else {
+            parsed
+                .as_ref()
+                .and_then(|u| u.host_str())
+                .unwrap_or_default()
+                .to_owned()
+        },
+        insecure: !magnet && parsed.as_ref().is_some_and(is_insecure),
         url,
         label: row.get(4)?,
         kind: LinkKind::parse(&kind),
@@ -91,10 +102,18 @@ pub fn save_link(
     input: &LinkInput,
     now: i64,
 ) -> Result<GameLink> {
-    let url = parse_link_url(&input.url)?;
-    let handler = sites.detect(&url);
-    let url = handler.normalize(url);
-    let site_id = handler.info().id.clone();
+    let (url, site_id) = if input.url.trim().to_ascii_lowercase().starts_with("magnet:") {
+        // A magnet link has no page to normalise: it is stored exactly as validated, and the
+        // UI offers to queue it for download instead of opening it.
+        (parse_magnet_url(&input.url)?, GENERIC_SITE_ID.to_owned())
+    } else {
+        let parsed = parse_link_url(&input.url)?;
+        let handler = sites.detect(&parsed);
+        (
+            handler.normalize(parsed).to_string(),
+            handler.info().id.clone(),
+        )
+    };
     let label = optional_text(input.label.as_deref(), MAX_LABEL_CHARS, "label_too_long")?;
     let version = optional_text(
         input.version.as_deref(),
@@ -147,7 +166,7 @@ pub fn delete_link(conn: &Connection, id: i64) -> Result<bool> {
 pub fn record_check(conn: &Connection, id: i64, check: &LinkCheck) -> Result<()> {
     conn.execute(
         "UPDATE game_links SET check_status = ?2, http_status = ?3, resolved_url = ?4, final_host = ?5, redirects = ?6,
-           file_name = ?7, size_bytes = ?8, content_type = ?9, is_file = ?10, checked_at = ?11 WHERE id = ?1",
+           file_name = ?7, size_bytes = ?8, content_type = ?9, is_file = ?10, checked_at = ?11, hops = ?12 WHERE id = ?1",
         params![
             id,
             check.status.as_str(),
@@ -160,6 +179,7 @@ pub fn record_check(conn: &Connection, id: i64, check: &LinkCheck) -> Result<()>
             check.content_type,
             check.is_file,
             check.checked_at,
+            serde_json::to_string(&check.hops).unwrap_or_else(|_| "[]".into()),
         ],
     )?;
     Ok(())
@@ -168,7 +188,8 @@ pub fn record_check(conn: &Connection, id: i64, check: &LinkCheck) -> Result<()>
 fn clear_check(conn: &Connection, id: i64) -> Result<()> {
     conn.execute(
         "UPDATE game_links SET check_status = NULL, http_status = NULL, resolved_url = NULL, final_host = NULL,
-           redirects = NULL, file_name = NULL, size_bytes = NULL, content_type = NULL, is_file = NULL, checked_at = NULL
+           redirects = NULL, file_name = NULL, size_bytes = NULL, content_type = NULL, is_file = NULL, checked_at = NULL,
+           hops = NULL
          WHERE id = ?1",
         params![id],
     )?;

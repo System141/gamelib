@@ -60,6 +60,7 @@ fn registry() -> SiteRegistry {
         homepage: Some("https://example.org".into()),
         domains: vec!["example.org".into()],
         color: "#123456".into(),
+        browser_required: false,
     }))])
 }
 
@@ -147,6 +148,95 @@ fn site_specific_handler_is_detected() {
     );
     assert!(registry().get("generic").is_some());
     assert!(registry().get("nope").is_none());
+}
+
+#[test]
+fn magnet_links_are_stored_without_a_host() {
+    let db = db_with_game();
+    let sites = registry();
+    let magnet = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Dota+2";
+    let link = save_link(db.conn(), &sites, &input(magnet), NOW).unwrap();
+    assert_eq!(link.url, magnet, "kept exactly as given");
+    assert_eq!(link.host, "magnet");
+    assert_eq!(link.site_id, "generic");
+    assert!(!link.insecure, "a magnet link is not an http address");
+
+    // The site's own normalisation is for web pages, so a check recorded by hand stays put
+    // while the address does not change.
+    let check = follow_redirects(
+        &Url::parse(&format!("{}/final", server())).unwrap(),
+        &resolve::client().unwrap(),
+    );
+    record_check(db.conn(), link.id, &check).unwrap();
+    let edited = save_link(
+        db.conn(),
+        &sites,
+        &LinkInput {
+            id: Some(link.id),
+            label: Some("Yeni".into()),
+            ..input(magnet)
+        },
+        NOW + 1,
+    )
+    .unwrap();
+    assert_eq!(edited.host, "magnet");
+    assert_eq!(
+        edited.last_check.map(|c| c.status),
+        Some(CheckStatus::Ok),
+        "an unchanged address keeps its check"
+    );
+
+    // Another torrent clears it.
+    let other = save_link(
+        db.conn(),
+        &sites,
+        &LinkInput {
+            id: Some(link.id),
+            ..input("magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98")
+        },
+        NOW + 2,
+    )
+    .unwrap();
+    assert!(other.last_check.is_none());
+    assert_eq!(other.host, "magnet");
+
+    assert_eq!(list_links(db.conn(), 570).unwrap().len(), 1);
+    assert!(delete_link(db.conn(), link.id).unwrap());
+}
+
+#[test]
+fn magnet_links_need_a_hexadecimal_info_hash() {
+    let db = db_with_game();
+    let sites = registry();
+    for bad in [
+        "magnet:",
+        "magnet:?dn=Dota+2",
+        "magnet:?xt=urn:btih:1234",
+        "magnet:?xt=urn:btih:zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+        "magnet:?xt=urn:btmh:1220caf1e1d1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+        "magnet:?xt=dn=Dota",
+    ] {
+        assert!(
+            matches!(
+                save_link(db.conn(), &sites, &input(bad), NOW),
+                Err(Error::Invalid("torrent_parse"))
+            ),
+            "{bad}"
+        );
+    }
+    // An upper-case hash is fine as it is.
+    let link = save_link(
+        db.conn(),
+        &sites,
+        &input("magnet:?xt=urn:btih:0123456789ABCDEF0123456789ABCDEF01234567"),
+        NOW,
+    )
+    .unwrap();
+    assert_eq!(link.host, "magnet");
+    assert_eq!(
+        link.url,
+        "magnet:?xt=urn:btih:0123456789ABCDEF0123456789ABCDEF01234567"
+    );
 }
 
 #[test]
@@ -260,6 +350,8 @@ fn handle(mut stream: TcpStream, base: &str) {
             b"",
         ),
         "/loop" => ("302 Found", vec!["Location: /loop".into()], b""),
+        "/forbidden" => ("403 Forbidden", vec![], b""),
+        "/boom" => ("500 Internal Server Error", vec![], b""),
         "/nohead" if method == "HEAD" => ("405 Method Not Allowed", vec![], b""),
         "/nohead" if ranged => (
             "206 Partial Content",
@@ -367,7 +459,7 @@ fn reports_broken_links_loops_and_limits() {
     let missing = check(&base, "/missing");
     assert_eq!(
         (missing.status, missing.http_status),
-        (CheckStatus::Broken, Some(404))
+        (CheckStatus::NotFound, Some(404))
     );
     assert_eq!(check(&base, "/loop").status, CheckStatus::Loop);
     let chain = check(&base, "/chain/0");
@@ -376,6 +468,84 @@ fn reports_broken_links_loops_and_limits() {
     let custom = check(&base, "/custom");
     assert_eq!(custom.status, CheckStatus::UnsupportedScheme);
     assert_eq!(custom.final_url.as_deref(), Some("magnet:?xt=urn:btih:abc"));
+}
+
+#[test]
+fn final_statuses_are_reported_by_kind() {
+    let base = server();
+    for (path, kind, code) in [
+        ("/forbidden", CheckStatus::Restricted, 403),
+        ("/boom", CheckStatus::ServerError, 500),
+        ("/missing", CheckStatus::NotFound, 404),
+    ] {
+        let c = check(&base, path);
+        assert_eq!((c.status, c.http_status), (kind, Some(code)), "{path}");
+    }
+}
+
+#[test]
+fn redirect_chain_is_stored_with_the_link() {
+    let db = db_with_game();
+    let sites = registry();
+    let base = server();
+    let link = save_link(db.conn(), &sites, &input(&format!("{base}/start")), NOW).unwrap();
+
+    record_check(db.conn(), link.id, &check(&base, "/start")).unwrap();
+    let stored = list_links(db.conn(), 570).unwrap();
+    let chain = stored[0].last_check.as_ref().expect("check stored");
+    assert_eq!(
+        chain.hops.iter().map(|h| h.status).collect::<Vec<_>>(),
+        [301, 302, 200]
+    );
+    assert_eq!(chain.redirects, 2);
+
+    // A label-only edit keeps the stored chain.
+    let edited = save_link(
+        db.conn(),
+        &sites,
+        &LinkInput {
+            id: Some(link.id),
+            label: Some("Ayna".into()),
+            ..input(&link.url)
+        },
+        NOW + 1,
+    )
+    .unwrap();
+    let kept = edited.last_check.expect("check kept");
+    assert_eq!(
+        kept.hops.iter().map(|h| h.status).collect::<Vec<_>>(),
+        [301, 302, 200]
+    );
+
+    // Changing the URL clears it.
+    let moved = save_link(
+        db.conn(),
+        &sites,
+        &LinkInput {
+            id: Some(link.id),
+            ..input(&format!("{base}/final"))
+        },
+        NOW + 2,
+    )
+    .unwrap();
+    assert!(moved.last_check.is_none());
+}
+
+#[test]
+fn links_checked_before_the_chain_column_decode_without_hops() {
+    let db = db_with_game();
+    db.conn()
+        .execute(
+            "INSERT INTO game_links(appid, site_id, url, label, kind, check_status, http_status, checked_at, created_at, updated_at)
+             VALUES (570, 'generic', 'https://example.org/x', '', 'download', 'ok', 200, 1, 1, 1)",
+            [],
+        )
+        .unwrap();
+
+    let stored = list_links(db.conn(), 570).unwrap();
+    let summary = stored[0].last_check.as_ref().expect("check decoded");
+    assert_eq!(summary.status, CheckStatus::Ok);
+    assert!(summary.hops.is_empty());
 }
 
 #[test]

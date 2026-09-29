@@ -5,6 +5,7 @@
 import { fold, normalizeName } from "../lib/fold";
 import { nowSeconds } from "../lib/format";
 import type {
+  AccountStore,
   Accounts,
   AppStatus,
   CmdError,
@@ -12,6 +13,7 @@ import type {
   DownloadList,
   DownloadProgress,
   FileOption,
+  FoundLink,
   Installed,
   InstallProgress,
   GameCard,
@@ -50,7 +52,25 @@ const CONFIDENT = 0.85;
 
 type Emit = (event: string, payload: unknown) => void;
 
-const SITES: SiteInfo[] = [{ id: "generic", name: "Other site", homepage: null, domains: [], color: "#8b93a7" }];
+const SITES: SiteInfo[] = [
+  {
+    id: "ankergames",
+    name: "AnkerGames",
+    homepage: "https://ankergames.net",
+    domains: ["ankergames.net"],
+    color: "#4f5b93",
+    browserRequired: true,
+  },
+  {
+    id: "fitgirl",
+    name: "FitGirl Repacks",
+    homepage: "https://fitgirl-repacks.site",
+    domains: ["fitgirl-repacks.site"],
+    color: "#e91e8c",
+    browserRequired: false,
+  },
+  { id: "generic", name: "Other site", homepage: null, domains: [], color: "#8b93a7", browserRequired: false },
+];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const invalid = (message: string): CmdError => ({ kind: "invalid", message });
 
@@ -201,6 +221,8 @@ export class MockBackend {
         return this.storeFiles(args.store, args.productId);
       case "enqueue_download":
         return this.enqueue(args.store, args.productId, args.optionId);
+      case "enqueue_torrent":
+        return this.enqueueTorrent(args.appid, args.title, args.source);
       case "get_update_status":
         return this.updateStatus();
       case "check_update":
@@ -256,6 +278,9 @@ export class MockBackend {
         return SITES;
       case "list_links":
         return this.links.filter((l) => l.appid === args.appid);
+      case "find_links":
+        await sleep(900);
+        return this.findLinks(args.appid as number);
       case "save_link":
         await sleep(150);
         return this.saveLink(args.input as LinkInput);
@@ -269,6 +294,7 @@ export class MockBackend {
         return this.checkLink(args.id as number);
       case "open_link":
       case "open_in_steam":
+      case "open_browser":
         console.info(`[mock] ${cmd}`, args);
         return null;
       default:
@@ -281,10 +307,46 @@ export class MockBackend {
     return { ...g, linkCount: this.links.filter((l) => l.appid === appid).length, stores: this.storesOf(appid) };
   }
 
+  /** Canned site-search results, so the browser preview shows the feature without a network. */
+  private findLinks(appid: number): FoundLink[] {
+    const game = this.all.find((x) => x.appid === appid);
+    if (!game) return [];
+    const slug = game.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+    return [
+      {
+        siteId: "fitgirl",
+        url: `magnet:?xt=urn:btih:${"7f9f2ea2a2bd89c65d14ed816987938fd5d48b07"}&dn=${encodeURIComponent(game.name)}`,
+        label: `${game.name} [FitGirl Repack]`,
+        kind: "download",
+        version: "1.0",
+        size: "31.7 GB",
+        notes: null,
+        score: 1,
+        needsBrowser: false,
+        direct: true,
+      },
+      {
+        siteId: "ankergames",
+        url: `https://ankergames.net/game/${slug}`,
+        label: game.name,
+        kind: "page",
+        version: "1.0",
+        size: "26.6 GB",
+        notes: "İndirme bağlantısı için sayfada doğrulama adımı var.",
+        score: 1,
+        needsBrowser: true,
+        direct: false,
+      },
+    ];
+  }
+
   /** Stores with a confident match for a game. */
-  private storesOf(appid: number): Store[] {
+  private storesOf(appid: number): AccountStore[] {
     const stores = new Set((this.matches.get(appid) ?? []).filter(isConfident).map((m) => m.store));
-    return (["gog", "itch"] as Store[]).filter((s) => stores.has(s));
+    return (["gog", "itch"] as AccountStore[]).filter((s) => stores.has(s));
   }
 
   private storeMatches(appid: number): StoreMatch[] {
@@ -294,14 +356,14 @@ export class MockBackend {
       .sort((a, b) => a.store.localeCompare(b.store) || Number(b.confident) - Number(a.confident) || b.score - a.score);
   }
 
-  private signIn(store: Store, username: string): Accounts {
+  private signIn(store: AccountStore, username: string): Accounts {
     this.accounts = { ...this.accounts, [store]: { username } };
     // Like the app: when another job runs, the library is read once it ends.
     void this.startWorker("library").catch(() => (this.libraryPending = true));
     return this.accounts;
   }
 
-  private signOut(store: Store): Accounts {
+  private signOut(store: AccountStore): Accounts {
     this.accounts = { ...this.accounts, [store]: null };
     for (const key of [...this.owned]) if (key.startsWith(`${store}:`)) this.owned.delete(key);
     if (store === "itch") this.itchLibrary = [];
@@ -382,7 +444,7 @@ export class MockBackend {
   // --- downloads -------------------------------------------------------------------------------
 
   /** A store's variants for a product, like the real APIs list them. */
-  private storeFiles(store: Store, productId: string): FileOption[] {
+  private storeFiles(store: AccountStore, productId: string): FileOption[] {
     if (!this.accounts[store]) throw invalid(store === "gog" ? "gog_signed_out" : "itch_signed_out");
     const title = this.productTitle(store, productId);
     const slug =
@@ -423,7 +485,7 @@ export class MockBackend {
     ];
   }
 
-  private productTitle(store: Store, productId: string): string {
+  private productTitle(store: AccountStore, productId: string): string {
     const owned = this.library().find((i) => i.store === store && i.productId === productId);
     if (owned) return owned.title;
     for (const list of this.matches.values()) {
@@ -433,7 +495,7 @@ export class MockBackend {
     throw { kind: "not_found", message: "not found" } satisfies CmdError;
   }
 
-  private enqueue(store: Store, productId: string, optionId: string): Download {
+  private enqueue(store: AccountStore, productId: string, optionId: string): Download {
     const existing = this.downloads.find(
       (d) => d.store === store && d.productId === productId && d.optionId === optionId && d.state !== "completed",
     );
@@ -448,6 +510,7 @@ export class MockBackend {
     const download: Download = {
       id,
       store,
+      sourceKind: "http",
       productId,
       appid,
       title: this.productTitle(store, productId),
@@ -459,6 +522,60 @@ export class MockBackend {
       doneBytes: 0,
       dir: `${this.settings.libraryDir}\\.gamelib\\downloads\\${id}`,
       files: option.files,
+      error: null,
+      createdAt: nowSeconds(),
+      finishedAt: null,
+      installState: null,
+      installKind: null,
+      installError: null,
+    };
+    this.downloads = [download, ...this.downloads];
+    this.emit("download:state", download);
+    this.pump();
+    return download;
+  }
+
+  /** A torrent's size is only known from its metadata; the preview assumes a plausible one. */
+  private enqueueTorrent(appid: number, title: string, source: string): Download {
+    const magnet = source.trim().toLowerCase().startsWith("magnet:");
+    let optionId: string;
+    if (magnet) {
+      const hash = /[?&]xt=urn:btih:([0-9a-f]{40})(?:&|$)/i.exec(source)?.[1];
+      if (!hash) throw invalid("torrent_parse");
+      optionId = hash.toLowerCase();
+    } else {
+      let url: URL;
+      try {
+        url = new URL(source.trim());
+      } catch {
+        throw invalid(source.trim() ? "url_parse" : "url_empty");
+      }
+      if (url.protocol !== "http:" && url.protocol !== "https:") throw invalid("url_scheme");
+      optionId = url.toString();
+    }
+    const existing = this.downloads.find(
+      (d) => d.sourceKind === "torrent" && d.productId === String(appid) && d.optionId === optionId && d.state !== "completed",
+    );
+    if (existing) {
+      this.resumeDownload(existing.id);
+      return existing;
+    }
+    const id = this.nextDownloadId++;
+    const download: Download = {
+      id,
+      store: "web",
+      sourceKind: "torrent",
+      productId: String(appid),
+      appid,
+      title,
+      optionId,
+      optionLabel: title,
+      platform: null,
+      state: "queued",
+      totalBytes: 12 * 1024 ** 3,
+      doneBytes: 0,
+      dir: `${this.settings.libraryDir}\\.gamelib\\downloads\\${id}`,
+      files: 1,
       error: null,
       createdAt: nowSeconds(),
       finishedAt: null,
@@ -530,9 +647,16 @@ export class MockBackend {
         this.emit("download:progress", this.live);
         if (verifying < 4) return;
         this.stopTransfer();
-        this.setDownload(d.id, { state: "completed", finishedAt: nowSeconds(), installState: "waiting" });
+        // A torrent's files stay in their folder: nothing is installed.
+        const torrent = d.sourceKind === "torrent";
+        this.setDownload(d.id, {
+          state: "completed",
+          finishedAt: nowSeconds(),
+          installState: torrent ? "manual" : "waiting",
+          installKind: torrent ? "torrent" : null,
+        });
         this.pump();
-        void this.install(d.id);
+        if (!torrent) void this.install(d.id);
         return;
       }
       d.doneBytes = Math.min(d.totalBytes, d.doneBytes + Math.round(step * (0.8 + Math.random() * 0.4)));
@@ -671,7 +795,7 @@ export class MockBackend {
     return [hit(String(8_000_000 + appid), g.name, 1), hit(String(8_500_000 + appid), `${g.name} Demake`, 0)];
   }
 
-  private linkStoreProduct(store: Store, productId: string, appid: number): null {
+  private linkStoreProduct(store: AccountStore, productId: string, appid: number): null {
     const g = this.find(appid);
     const list = this.matches.get(appid) ?? [];
     list.push({
@@ -696,7 +820,7 @@ export class MockBackend {
     return null;
   }
 
-  private setMatchState(store: Store, productId: string, appid: number, state: MatchState): null {
+  private setMatchState(store: AccountStore, productId: string, appid: number, state: MatchState): null {
     const match = (this.matches.get(appid) ?? []).find((m) => m.store === store && m.productId === productId);
     if (!match) throw { kind: "not_found", message: "not found" } satisfies CmdError;
     match.state = state;
@@ -979,16 +1103,22 @@ export class MockBackend {
     let raw = input.url.trim();
     if (!raw) throw invalid("url_empty");
     if (raw.length > 2048) throw invalid("url_too_long");
-    if (!raw.includes("://")) raw = `https://${raw}`;
-    let url: URL;
-    try {
-      url = new URL(raw);
-    } catch {
-      throw invalid("url_parse");
+    // A magnet link has no host and no site handler: it is stored as it was given.
+    const magnet = raw.toLowerCase().startsWith("magnet:");
+    if (magnet && !/[?&]xt=urn:btih:[0-9a-f]{40}(?:&|$)/i.test(raw)) throw invalid("torrent_parse");
+    if (!magnet && !raw.includes("://")) raw = `https://${raw}`;
+    let url: URL | null = null;
+    if (!magnet) {
+      try {
+        url = new URL(raw);
+      } catch {
+        throw invalid("url_parse");
+      }
+      if (url.protocol !== "http:" && url.protocol !== "https:") throw invalid("url_scheme");
+      if (url.username || url.password) throw invalid("url_credentials");
+      for (const key of [...url.searchParams.keys()]) if (/^utm_/i.test(key) || key === "fbclid") url.searchParams.delete(key);
     }
-    if (url.protocol !== "http:" && url.protocol !== "https:") throw invalid("url_scheme");
-    if (url.username || url.password) throw invalid("url_credentials");
-    for (const key of [...url.searchParams.keys()]) if (/^utm_/i.test(key) || key === "fbclid") url.searchParams.delete(key);
+    const stored = url?.toString() ?? raw;
     const text = (v: string | null | undefined, max: number, code: string) => {
       const t = v?.trim() || null;
       if (t && t.length > max) throw invalid(code);
@@ -996,19 +1126,22 @@ export class MockBackend {
     };
     const now = nowSeconds();
     const existing = input.id ? this.links.find((l) => l.id === input.id) : undefined;
+    // Mirrors the core's `SiteRegistry::detect`: the first site owning the host, else generic.
+    const host = magnet ? "" : (url?.hostname ?? "").toLowerCase();
+    const site = host ? SITES.find((s) => s.domains.some((d) => host === d || host.endsWith(`.${d}`))) : undefined;
     const link: GameLink = {
       id: existing?.id ?? this.nextLinkId++,
       appid: input.appid,
-      siteId: "generic",
-      url: url.toString(),
-      host: url.hostname,
+      siteId: site?.id ?? "generic",
+      url: stored,
+      host: magnet ? "magnet" : (url?.hostname ?? ""),
       label: text(input.label, 120, "label_too_long"),
       kind: input.kind,
       platform: input.platform ?? null,
       version: text(input.version, 60, "version_too_long"),
       notes: text(input.notes, 1000, "notes_too_long"),
-      insecure: url.protocol === "http:",
-      lastCheck: existing && existing.url === url.toString() ? existing.lastCheck : null,
+      insecure: !magnet && url?.protocol === "http:",
+      lastCheck: existing && existing.url === stored ? existing.lastCheck : null,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -1050,6 +1183,7 @@ export class MockBackend {
       resolvedUrl: check.finalUrl,
       finalHost: check.finalHost,
       redirects: Math.max(0, check.hops.length - 1),
+      hops: check.hops,
       fileName: check.fileName,
       sizeBytes: check.sizeBytes,
       contentType: check.contentType,

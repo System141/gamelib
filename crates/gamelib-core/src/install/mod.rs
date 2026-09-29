@@ -608,6 +608,8 @@ fn store_page(store: Store) -> &'static str {
     match store {
         Store::Gog => "https://www.gog.com/",
         Store::Itch => "https://itch.io/",
+        // Web downloads have no store page to mark.
+        Store::Web => "",
     }
 }
 

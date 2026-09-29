@@ -1,3 +1,4 @@
+mod browser;
 mod commands;
 mod error;
 mod login;
@@ -67,6 +68,7 @@ pub fn run() {
             commands::pick_library_dir,
             commands::get_store_files,
             commands::enqueue_download,
+            commands::enqueue_torrent,
             commands::get_downloads,
             commands::pause_download,
             commands::resume_download,
@@ -87,11 +89,13 @@ pub fn run() {
             updates::open_release_page,
             commands::list_sites,
             commands::list_links,
+            commands::find_links,
             commands::save_link,
             commands::delete_link,
             commands::check_link,
             commands::open_link,
             commands::open_in_steam,
+            commands::open_browser,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GameLib");

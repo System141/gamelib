@@ -234,7 +234,10 @@ function LibraryCard({ item, onOpenGame }: { item: LibraryItem; onOpenGame: (app
           )}
           <span className="ml-auto flex items-center gap-1.5">
             {item.appid != null && <SmallButton onClick={() => onOpenGame(item.appid!)}>{tr.library.details}</SmallButton>}
-            {item.url != null && <IconButton label={tr.stores.openIn[item.store]} icon={<ExternalLink size={13} />} onClick={openStore} />}
+            {/* Only GOG and itch.io have a store page to open. */}
+            {item.url != null && item.store !== "web" && (
+              <IconButton label={tr.stores.openIn[item.store]} icon={<ExternalLink size={13} />} onClick={openStore} />
+            )}
             {installed && <InstallMenu installed={installed} />}
           </span>
         </div>

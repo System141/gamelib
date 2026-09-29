@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use gamelib_core::app::{App, steam_url};
 use gamelib_core::model::{
-    Accounts, AppStatus, Download, DownloadList, FileOption, GameDetail, GameLink, GameMedia,
-    GamePage, GameQuery, Installed, LibraryItem, LinkCheck, LinkInput, MatchState, OpenTarget,
-    Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, TagInfo,
+    Accounts, AppStatus, Download, DownloadList, FileOption, FoundLink, GameDetail, GameLink,
+    GameMedia, GamePage, GameQuery, Installed, LibraryItem, LinkCheck, LinkInput, MatchState,
+    OpenTarget, Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, TagInfo,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -282,6 +282,17 @@ pub async fn enqueue_download(
     .await
 }
 
+/// Queues a magnet link or a `.torrent` address for download.
+#[tauri::command]
+pub async fn enqueue_torrent(
+    app: State<'_, Arc<App>>,
+    appid: u32,
+    title: String,
+    source: String,
+) -> CmdResult<Download> {
+    blocking(&app, move |app| app.enqueue_torrent(appid, &title, &source)).await
+}
+
 #[tauri::command]
 pub async fn get_downloads(app: State<'_, Arc<App>>) -> CmdResult<DownloadList> {
     blocking(&app, App::downloads).await
@@ -439,6 +450,12 @@ pub async fn list_links(app: State<'_, Arc<App>>, appid: u32) -> CmdResult<Vec<G
     blocking(&app, move |app| app.list_links(appid)).await
 }
 
+/// Searches the known sites for this game and returns the links they offer.
+#[tauri::command]
+pub async fn find_links(app: State<'_, Arc<App>>, appid: u32) -> CmdResult<Vec<FoundLink>> {
+    blocking(&app, move |app| app.find_links(appid)).await
+}
+
 #[tauri::command]
 pub async fn save_link(app: State<'_, Arc<App>>, input: LinkInput) -> CmdResult<GameLink> {
     blocking(&app, move |app| app.save_link(&input)).await
@@ -465,4 +482,16 @@ pub async fn open_link(handle: AppHandle, app: State<'_, Arc<App>>, id: i64) -> 
 #[tauri::command]
 pub fn open_in_steam(handle: AppHandle, appid: u32, target: OpenTarget) -> CmdResult<()> {
     open_url(&handle, steam_url(appid, target))
+}
+
+/// Opens a page in the in-app browser; downloads there are captured into the queue.
+#[tauri::command]
+pub async fn open_browser(
+    handle: AppHandle,
+    app: State<'_, Arc<App>>,
+    appid: u32,
+    title: String,
+    url: String,
+) -> CmdResult<()> {
+    crate::browser::open(&handle, Arc::clone(&app), appid, title, url).await
 }

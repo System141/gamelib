@@ -3,18 +3,19 @@
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::downloads::sources::Source;
-use crate::model::{Download, DownloadState, InstallState, Platform, Store};
+use crate::model::{Download, DownloadSourceKind, DownloadState, InstallState, Platform, Store};
 use crate::{ErrorInfo, ErrorKind, Result};
 
 const COLUMNS: &str =
     "d.id, d.store, d.product_id, d.appid, d.title, d.option_id, d.option_label, d.platform,
   d.state, d.total_bytes, d.done_bytes, d.dir, d.error_kind, d.error, d.created_at, d.finished_at,
   (SELECT COUNT(*) FROM download_files f WHERE f.download_id = d.id),
-  d.install_state, d.install_kind, d.install_error_kind, d.install_error";
+  d.install_state, d.install_kind, d.install_error_kind, d.install_error, d.source_kind";
 
 /// A new queued download and its files (all pending).
 pub struct NewDownload<'a> {
     pub store: Store,
+    pub source_kind: DownloadSourceKind,
     pub product_id: &'a str,
     pub appid: Option<u32>,
     pub title: &'a str,
@@ -34,8 +35,8 @@ pub fn insert(
     let tx = conn.transaction()?;
     tx.execute(
         "INSERT INTO downloads(store, product_id, appid, title, option_id, option_label, platform,
-           state, total_bytes, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'queued', ?8, ?9, ?9)",
+           state, total_bytes, created_at, updated_at, source_kind)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'queued', ?8, ?9, ?9, ?10)",
         params![
             d.store.as_str(),
             d.product_id,
@@ -45,7 +46,8 @@ pub fn insert(
             d.option_label,
             d.platform.map(Platform::as_str),
             total as i64,
-            now
+            now,
+            d.source_kind.as_str()
         ],
     )?;
     let id = tx.last_insert_rowid();
@@ -367,6 +369,10 @@ fn row(r: &Row<'_>) -> rusqlite::Result<Download> {
     Ok(Download {
         id: r.get(0)?,
         store: Store::parse(&store).unwrap_or_default(),
+        source_kind: r
+            .get::<_, Option<String>>(21)?
+            .as_deref()
+            .map_or(DownloadSourceKind::Http, DownloadSourceKind::parse),
         product_id: r.get(2)?,
         appid: r.get(3)?,
         title: r.get(4)?,

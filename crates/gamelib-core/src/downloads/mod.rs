@@ -11,6 +11,7 @@
 pub mod fetch;
 pub mod names;
 pub mod sources;
+pub mod torrent;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -25,7 +26,7 @@ use crate::app::EventSink;
 use crate::db::Db;
 use crate::db::downloads::{self as queue, FileRow, NewDownload};
 use crate::http::backoff;
-use crate::model::{Download, DownloadProgress, DownloadState, InstallState};
+use crate::model::{Download, DownloadProgress, DownloadSourceKind, DownloadState, InstallState};
 use crate::secrets::SecretStore;
 use crate::stores::StoreSyncOptions;
 use crate::{Error, ErrorInfo, Result, check_cancel, sleep_cancellable, unix_now};
@@ -54,6 +55,8 @@ struct Shared {
     sink: Arc<dyn EventSink>,
     secrets: Arc<SecretStore>,
     opts: StoreSyncOptions,
+    /// How torrent transfers look for peers (the app uses the swarm).
+    torrent: torrent::Options,
     /// Called when a download finished, so it gets installed.
     on_complete: Arc<dyn Fn() + Send + Sync>,
     control: Mutex<Control>,
@@ -90,6 +93,7 @@ impl DownloadManager {
         sink: Arc<dyn EventSink>,
         secrets: Arc<SecretStore>,
         opts: StoreSyncOptions,
+        torrent: torrent::Options,
         on_complete: Arc<dyn Fn() + Send + Sync>,
     ) -> Self {
         Self {
@@ -98,6 +102,7 @@ impl DownloadManager {
                 sink,
                 secrets,
                 opts,
+                torrent,
                 on_complete,
                 control: Mutex::new(Control::default()),
                 wake: Condvar::new(),
@@ -363,7 +368,14 @@ fn run_one(shared: &Shared, conn: &Connection, download: Download, cancel: &Atom
     let _ = queue::set_state(conn, id, state, error.as_ref(), now);
     let completed = state == DownloadState::Completed;
     if completed {
-        let _ = queue::set_install_state(conn, id, Some(InstallState::Waiting), None, None, now);
+        // Torrent content is not a store-defined installer: the folder is left for the user to
+        // open, so nothing is unpacked or run automatically.
+        let install = match download.source_kind {
+            DownloadSourceKind::Torrent => InstallState::Manual,
+            DownloadSourceKind::Http => InstallState::Waiting,
+        };
+        let kind = (install == InstallState::Manual).then_some("torrent");
+        let _ = queue::set_install_state(conn, id, Some(install), kind, None, now);
     }
     drop(control);
     shared.emit_state(conn, id);
@@ -464,7 +476,8 @@ impl<'a> Tracker<'a> {
     }
 }
 
-/// Downloads every file of `download` that is not done yet.
+/// Downloads every file of `download` that is not done yet, or hands a torrent source whole to
+/// the torrent engine.
 fn transfer(
     shared: &Shared,
     conn: &Connection,
@@ -473,6 +486,9 @@ fn transfer(
 ) -> Result<()> {
     let dir = PathBuf::from(&download.dir);
     std::fs::create_dir_all(&dir).map_err(|e| Error::Other(format!("{}: {e}", dir.display())))?;
+    if download.source_kind == DownloadSourceKind::Torrent {
+        return transfer_torrent(shared, conn, download, &dir, cancel);
+    }
     let files = queue::files(conn, download.id)?;
     let owned_key = queue::owned_key(conn, download.store, &download.product_id)?;
     let finished: u64 = files.iter().filter(|f| f.done).filter_map(|f| f.size).sum();
@@ -511,6 +527,47 @@ fn transfer(
     }
     tracker.save();
     result
+}
+
+/// Downloads a torrent source into the download's folder; the single file row only remembers
+/// which address it came from.
+fn transfer_torrent(
+    shared: &Shared,
+    conn: &Connection,
+    download: &Download,
+    dir: &Path,
+    cancel: &AtomicBool,
+) -> Result<()> {
+    let source = queue::files(conn, download.id)?
+        .into_iter()
+        .find_map(|f| match f.source {
+            sources::Source::Torrent(url) => Some(url),
+            _ => None,
+        })
+        .ok_or(Error::Invalid("torrent_parse"))?;
+    let mut tracker = Tracker::new(
+        shared,
+        conn,
+        download.id,
+        download.total_bytes,
+        download.done_bytes,
+    );
+    // The engine re-checks what the folder already holds, so a paused or interrupted transfer
+    // continues instead of starting over.
+    let result = torrent::run(&source, dir, cancel, &shared.torrent, &mut tracker);
+    tracker.save();
+    result
+}
+
+impl torrent::Progress for Tracker<'_> {
+    /// The engine only knows the total once it has read the metadata.
+    fn set_total(&mut self, total: u64) {
+        self.total = self.total.max(total);
+    }
+
+    fn bytes(&mut self, done: u64) {
+        Tracker::bytes(self, done);
+    }
 }
 
 /// What downloading one file needs.

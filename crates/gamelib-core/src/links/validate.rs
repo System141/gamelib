@@ -42,6 +42,42 @@ pub fn is_insecure(url: &Url) -> bool {
     url.scheme() == "http"
 }
 
+/// Parses a magnet link: only `magnet:` URLs carrying a 40-character hexadecimal info hash
+/// (`xt=urn:btih:…`) are accepted, since that is what names the torrent.
+///
+/// Errors carry the stable codes `url_empty`, `url_too_long` and `torrent_parse`.
+pub fn parse_magnet_url(input: &str) -> Result<String> {
+    let s = input.trim();
+    if s.is_empty() {
+        return Err(Error::Invalid("url_empty"));
+    }
+    if s.len() > MAX_URL_LEN {
+        return Err(Error::Invalid("url_too_long"));
+    }
+    if !s.to_ascii_lowercase().starts_with("magnet:") || magnet_info_hash(s).is_none() {
+        return Err(Error::Invalid("torrent_parse"));
+    }
+    Ok(s.to_owned())
+}
+
+/// The info hash (`xt=urn:btih:…`) of a magnet link, lowercased; `None` when it is missing or
+/// not hexadecimal.
+pub fn magnet_info_hash(magnet: &str) -> Option<String> {
+    let query = magnet.split_once('?').map(|(_, query)| query)?;
+    query.split('&').find_map(|param| {
+        let (key, value) = param.split_once('=')?;
+        if !key.eq_ignore_ascii_case("xt") {
+            return None;
+        }
+        if !value.get(..9)?.eq_ignore_ascii_case("urn:btih:") {
+            return None;
+        }
+        let hash = value.get(9..)?;
+        (hash.len() == 40 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+            .then(|| hash.to_ascii_lowercase())
+    })
+}
+
 /// Removes common tracking parameters. The query is left untouched when there is nothing to remove.
 pub fn strip_tracking(mut url: Url) -> Url {
     if url.query().is_none() {

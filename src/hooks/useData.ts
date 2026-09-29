@@ -94,6 +94,13 @@ export function useCheckLink() {
   });
 }
 
+/** Searches the known sites for this game; read-only, so nothing is invalidated. */
+export function useFindLinks() {
+  return useMutation({
+    mutationFn: (appid: number) => api.findLinks(appid),
+  });
+}
+
 // --- other stores ---------------------------------------------------------------------------
 
 export function useStoreMatches(appid: number | null) {
@@ -201,6 +208,17 @@ export function useEnqueueDownload() {
   return useMutation({
     mutationFn: ({ store, productId, optionId }: { store: Store; productId: string; optionId: string }) =>
       api.enqueueDownload(store, productId, optionId),
+    onSuccess: (download) => {
+      qc.setQueryData<DownloadList>(["downloads"], (list) => upsertDownload(list, download));
+    },
+  });
+}
+
+/** Queues a magnet link or a `.torrent` address; the row arrives like any other download. */
+export function useEnqueueTorrent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ appid, title, source }: { appid: number; title: string; source: string }) => api.enqueueTorrent(appid, title, source),
     onSuccess: (download) => {
       qc.setQueryData<DownloadList>(["downloads"], (list) => upsertDownload(list, download));
     },

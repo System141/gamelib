@@ -353,6 +353,9 @@ pub struct SiteInfo {
     pub domains: Vec<String>,
     /// Badge colour (#rrggbb).
     pub color: String,
+    /// Whether the site's pages hand the download out only through a browser click-through, so
+    /// saved links open in the in-app browser instead of the system one.
+    pub browser_required: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -382,6 +385,12 @@ pub enum CheckStatus {
     Ok,
     /// The final response was 4xx/5xx or a redirect had no target.
     Broken,
+    /// 401/403/429: the server refuses this client (login, region or rate limit).
+    Restricted,
+    /// 404/410: the page or file is gone.
+    NotFound,
+    /// 5xx: the server failed; the same link may work later.
+    ServerError,
     Loop,
     TooManyRedirects,
     Timeout,
@@ -396,6 +405,9 @@ impl CheckStatus {
         match self {
             CheckStatus::Ok => "ok",
             CheckStatus::Broken => "broken",
+            CheckStatus::Restricted => "restricted",
+            CheckStatus::NotFound => "not_found",
+            CheckStatus::ServerError => "server_error",
             CheckStatus::Loop => "loop",
             CheckStatus::TooManyRedirects => "too_many_redirects",
             CheckStatus::Timeout => "timeout",
@@ -408,6 +420,9 @@ impl CheckStatus {
     pub fn parse(s: &str) -> Self {
         match s {
             "ok" => CheckStatus::Ok,
+            "restricted" => CheckStatus::Restricted,
+            "not_found" => CheckStatus::NotFound,
+            "server_error" => CheckStatus::ServerError,
             "loop" => CheckStatus::Loop,
             "too_many_redirects" => CheckStatus::TooManyRedirects,
             "timeout" => CheckStatus::Timeout,
@@ -460,6 +475,8 @@ pub struct LinkCheckSummary {
     pub resolved_url: Option<String>,
     pub final_host: Option<String>,
     pub redirects: u32,
+    /// Every hop as it was followed; empty for rows stored before chains were kept.
+    pub hops: Vec<Hop>,
     pub file_name: Option<String>,
     pub size_bytes: Option<u64>,
     pub content_type: Option<String>,
@@ -487,6 +504,24 @@ pub struct GameLink {
     pub updated_at: i64,
 }
 
+/// A link a site search turned up for a Steam game, offered for the user to save.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundLink {
+    pub site_id: String,
+    pub url: String,
+    pub label: String,
+    pub kind: LinkKind,
+    pub version: Option<String>,
+    pub size: Option<String>,
+    pub notes: Option<String>,
+    pub score: f32,
+    /// The link has to be opened in a browser to finish (a verification step or a login).
+    pub needs_browser: bool,
+    /// The URL is the download itself (a magnet link) rather than a page to click through.
+    pub direct: bool,
+}
+
 // ---------------------------------------------------------------------------
 // Other stores (GOG, itch.io)
 // ---------------------------------------------------------------------------
@@ -499,15 +534,18 @@ pub enum Store {
     #[default]
     Gog,
     Itch,
+    /// A download captured from the in-app browser, not tied to a store account.
+    Web,
 }
 
 impl Store {
-    pub const ALL: [Store; 2] = [Store::Gog, Store::Itch];
+    pub const ALL: [Store; 3] = [Store::Gog, Store::Itch, Store::Web];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Store::Gog => "gog",
             Store::Itch => "itch",
+            Store::Web => "web",
         }
     }
 
@@ -515,6 +553,7 @@ impl Store {
         match s {
             "gog" => Some(Store::Gog),
             "itch" => Some(Store::Itch),
+            "web" => Some(Store::Web),
             _ => None,
         }
     }
@@ -741,6 +780,31 @@ pub struct FileOption {
     pub recommended: bool,
 }
 
+/// Where a download's bytes come from: an HTTP(S) address or a BitTorrent swarm.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DownloadSourceKind {
+    #[default]
+    Http,
+    Torrent,
+}
+
+impl DownloadSourceKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DownloadSourceKind::Http => "http",
+            DownloadSourceKind::Torrent => "torrent",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "torrent" => DownloadSourceKind::Torrent,
+            _ => DownloadSourceKind::Http,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DownloadState {
@@ -779,6 +843,8 @@ impl DownloadState {
 pub struct Download {
     pub id: i64,
     pub store: Store,
+    /// Whether the bytes come from an HTTP(S) address or a BitTorrent swarm.
+    pub source_kind: DownloadSourceKind,
     pub product_id: String,
     pub appid: Option<u32>,
     pub title: String,

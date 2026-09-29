@@ -24,10 +24,14 @@ use crate::{Error, Result};
 /// A file to download, as stored with the download.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
-    /// A GOG downlink (`https://api.gog.com/products/…/downlink/installer/…`).
+    /// A GOG downlink (`https://api.gog.com/products/.../downlink/installer/...`).
     GogDownlink(String),
     /// An itch.io upload.
     ItchUpload(u64),
+    /// A URL captured from the in-app browser; already the file itself, so nothing to resolve.
+    Direct(String),
+    /// A magnet link or the address of a `.torrent` file, handed to the torrent engine.
+    Torrent(String),
 }
 
 impl Source {
@@ -35,6 +39,8 @@ impl Source {
         match self {
             Source::GogDownlink(url) => format!("gog:{url}"),
             Source::ItchUpload(id) => format!("itch-upload:{id}"),
+            Source::Direct(url) => format!("direct:{url}"),
+            Source::Torrent(url) => format!("torrent:{url}"),
         }
     }
 
@@ -42,9 +48,14 @@ impl Source {
         if let Some(url) = s.strip_prefix("gog:") {
             return Some(Source::GogDownlink(url.to_owned()));
         }
-        s.strip_prefix("itch-upload:")?
-            .parse()
-            .ok()
+        if let Some(url) = s.strip_prefix("direct:") {
+            return Some(Source::Direct(url.to_owned()));
+        }
+        if let Some(url) = s.strip_prefix("torrent:") {
+            return Some(Source::Torrent(url.to_owned()));
+        }
+        s.strip_prefix("itch-upload:")
+            .and_then(|id| id.parse().ok())
             .map(Source::ItchUpload)
     }
 }
@@ -117,6 +128,8 @@ pub fn offers(
             })?;
             itch_offers(&body)?
         }
+        // A captured URL is the file itself; there is no offers API to ask.
+        Store::Web => return Err(Error::Invalid("store")),
     };
     recommend(&mut offers, this_platform());
     Ok(offers)
@@ -395,6 +408,15 @@ pub fn resolve(
                 }),
             }
         }
+        // The captured URL is already the file's address.
+        Source::Direct(url) => Ok(Resolved {
+            url: url.clone(),
+            ..Resolved::default()
+        }),
+        // The torrent engine gets a `.torrent` address or a magnet whole; nothing to resolve here.
+        Source::Torrent(_) => Err(Error::Other(
+            "a torrent download must not go through the HTTP transfer".into(),
+        )),
     }
 }
 

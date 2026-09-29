@@ -315,6 +315,7 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         "get_installs" => to_json(&app.installs()?),
         // Only the desktop app downloads (the preview server never starts the queue).
         "enqueue_download"
+        | "enqueue_torrent"
         | "pause_download"
         | "resume_download"
         | "remove_download"
@@ -329,6 +330,7 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         | "pick_launch_target" => return Err(desktop_only()),
         "list_sites" => to_json(&app.list_sites()),
         "list_links" => to_json(&app.list_links(parse::<AppidArgs>(args)?.appid)?),
+        "find_links" => to_json(&app.find_links(parse::<AppidArgs>(args)?.appid)?),
         "save_link" => to_json(&app.save_link(&parse::<LinkArgs>(args)?.input)?),
         "delete_link" => to_json(&app.delete_link(parse::<IdArgs>(args)?.id)?),
         "check_link" => to_json(&app.check_link(parse::<IdArgs>(args)?.id)?),

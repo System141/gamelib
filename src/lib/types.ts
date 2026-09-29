@@ -199,7 +199,18 @@ export interface AppStatus {
 
 export type LinkKind = "download" | "page";
 
-export type CheckStatus = "ok" | "broken" | "loop" | "too_many_redirects" | "timeout" | "network" | "tls" | "unsupported_scheme";
+export type CheckStatus =
+  | "ok"
+  | "broken"
+  | "restricted"
+  | "not_found"
+  | "server_error"
+  | "loop"
+  | "too_many_redirects"
+  | "timeout"
+  | "network"
+  | "tls"
+  | "unsupported_scheme";
 
 export interface SiteInfo {
   id: string;
@@ -207,6 +218,8 @@ export interface SiteInfo {
   homepage: string | null;
   domains: string[];
   color: string;
+  /** The site's pages hand the download out only through a browser click-through. */
+  browserRequired: boolean;
 }
 
 export interface LinkInput {
@@ -245,6 +258,8 @@ export interface LinkCheckSummary {
   resolvedUrl: string | null;
   finalHost: string | null;
   redirects: number;
+  /** Empty for checks stored before chains were kept. */
+  hops: Hop[];
   fileName: string | null;
   sizeBytes: number | null;
   contentType: string | null;
@@ -269,14 +284,32 @@ export interface GameLink {
   updatedAt: number;
 }
 
+/** A link a site search turned up for a Steam game, offered for the user to save. */
+export interface FoundLink {
+  siteId: string;
+  url: string;
+  label: string;
+  kind: LinkKind;
+  version: string | null;
+  size: string | null;
+  notes: string | null;
+  score: number;
+  /** The link has to be opened in a browser to finish (a verification step or a login). */
+  needsBrowser: boolean;
+  /** The URL is the download itself (a magnet link) rather than a page to click through. */
+  direct: boolean;
+}
+
 // --- other stores ---------------------------------------------------------------------------
 
-export type Store = "gog" | "itch";
+/** Every store GameLib knows: the two with accounts, and `web` for captured downloads. */
+export type Store = "gog" | "itch" | "web";
 export type MatchMethod = "gamesdb" | "title" | "manual";
 export type MatchState = "auto" | "confirmed" | "rejected";
 
 export interface StoreMatch {
-  store: Store;
+  /** Matches are only looked up for stores with an account. */
+  store: AccountStore;
   productId: string;
   title: string;
   url: string | null;
@@ -296,7 +329,8 @@ export interface StoreMatch {
 }
 
 export interface StoreSearchHit {
-  store: Store;
+  /** itch.io is the only store that can be searched by hand. */
+  store: AccountStore;
   productId: string;
   title: string;
   url: string | null;
@@ -316,10 +350,10 @@ export interface Account {
   username: string;
 }
 
-export interface Accounts {
-  gog: Account | null;
-  itch: Account | null;
-}
+/** The stores that have an account, a product page and a download picker. */
+export type AccountStore = "gog" | "itch";
+
+export type Accounts = Record<AccountStore, Account | null>;
 
 export interface LibraryItem {
   store: Store;
@@ -365,9 +399,13 @@ export interface FileOption {
 
 export type DownloadState = "queued" | "downloading" | "paused" | "completed" | "failed";
 
+/** Where a download's bytes come from: an HTTP(S) address or a BitTorrent swarm. */
+export type DownloadSourceKind = "http" | "torrent";
+
 export interface Download {
   id: number;
   store: Store;
+  sourceKind: DownloadSourceKind;
   productId: string;
   appid: number | null;
   title: string;

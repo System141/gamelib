@@ -153,8 +153,24 @@ function Title({ download, onOpenGame }: { download: Download; onOpenGame: (appi
       ) : (
         text
       )}
+      <SourcePill source={download.sourceKind} />
       <StorePill store={download.store} className="shrink-0" />
     </div>
+  );
+}
+
+/** Where the bytes come from: a direct download or a torrent. */
+function SourcePill({ source }: { source: Download["sourceKind"] }) {
+  return (
+    <span
+      title={tr.downloads.sourceHint[source]}
+      className={clsx(
+        "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wide ring-1",
+        source === "torrent" ? "bg-violet/15 text-violet ring-violet/35" : "bg-white/8 text-ink-300 ring-white/12",
+      )}
+    >
+      {tr.downloads.sources[source]}
+    </span>
   );
 }
 

@@ -17,6 +17,7 @@ impl GenericSite {
                 homepage: None,
                 domains: Vec::new(),
                 color: "#8b93a7".into(),
+                browser_required: false,
             },
         }
     }

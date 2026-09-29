@@ -15,16 +15,16 @@ use serde::Serialize;
 use crate::db::downloads::{self as download_db, NewDownload};
 use crate::db::write::{get_meta, set_meta};
 use crate::db::{Db, links, read, stores as store_db};
-use crate::downloads::{DownloadManager, sources};
+use crate::downloads::{DownloadManager, names, sources, torrent};
 use crate::http::{self, Counters, Pacer};
 use crate::install::{self, InstallManager};
-use crate::links::{SiteRegistry, resolve, validate};
+use crate::links::{SiteRegistry, find, resolve, validate};
 use crate::model::{
-    Account, Accounts, AppStatus, Download, DownloadList, FileOption, GameDetail, GameLink,
-    GameMedia, GamePage, GameQuery, Installed, LibraryItem, LibraryReport, LinkCheck, LinkInput,
-    MatchState, NewReleasesReport, OpenTarget, Outcome, Settings, SettingsPatch, SiteInfo, Store,
-    StoreMatch, StoreSearchHit, StoresReport, SyncFinished, SyncProgress, SyncReport, TagInfo,
-    WorkerKind,
+    Account, Accounts, AppStatus, Download, DownloadList, DownloadSourceKind, FileOption,
+    FoundLink, GameDetail, GameLink, GameMedia, GamePage, GameQuery, Installed, LibraryItem,
+    LibraryReport, LinkCheck, LinkInput, MatchState, NewReleasesReport, OpenTarget, Outcome,
+    Platform, Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, StoresReport,
+    SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
 };
 use crate::new_releases::{NewReleasesOptions, fetch_new_releases};
 use crate::secrets::{ItchKey, SecretStore};
@@ -53,6 +53,8 @@ pub struct JobOptions {
     pub sync: SyncOptions,
     pub new_releases: NewReleasesOptions,
     pub stores: StoreSyncOptions,
+    /// How torrent transfers find peers (the app uses the swarm).
+    pub torrent: torrent::Options,
     pub source: Arc<SourceFactory>,
 }
 
@@ -62,6 +64,7 @@ impl Default for JobOptions {
             sync: SyncOptions::default(),
             new_releases: NewReleasesOptions::default(),
             stores: StoreSyncOptions::default(),
+            torrent: torrent::Options::default(),
             source: Arc::new(steam_source),
         }
     }
@@ -153,6 +156,7 @@ impl App {
             sink.clone(),
             secrets.clone(),
             options.stores.clone(),
+            options.torrent.clone(),
             installs.notifier(),
         );
         let jobs = Arc::new(Jobs {
@@ -581,6 +585,7 @@ impl App {
         let library_dir = PathBuf::from(self.settings()?.library_dir);
         let new = NewDownload {
             store,
+            source_kind: DownloadSourceKind::Http,
             product_id,
             appid,
             title: &title,
@@ -588,6 +593,54 @@ impl App {
             option_label: Some(&offer.option.label),
             platform: offer.option.platform,
             files: &offer.files,
+        };
+        let mut writer = lock(&self.writer);
+        self.downloads
+            .enqueue(writer.conn_mut(), &new, &library_dir)
+    }
+
+    /// Queues a download captured from the in-app browser. The URL is already the file itself.
+    pub fn enqueue_captured(
+        &self,
+        appid: u32,
+        title: &str,
+        url: &str,
+        file_name: &str,
+    ) -> Result<Download> {
+        let url = validate::parse_link_url(url)?.into();
+        let safe_file_name = names::safe_name(file_name, "download");
+        let library_dir = PathBuf::from(self.settings()?.library_dir);
+        let new = NewDownload {
+            store: Store::Web,
+            source_kind: DownloadSourceKind::Http,
+            product_id: &appid.to_string(),
+            appid: Some(appid),
+            title,
+            option_id: &safe_file_name,
+            option_label: Some(&safe_file_name),
+            platform: Some(Platform::Win),
+            files: &[(sources::Source::Direct(url), None)],
+        };
+        let mut writer = lock(&self.writer);
+        self.downloads
+            .enqueue(writer.conn_mut(), &new, &library_dir)
+    }
+
+    /// Queues a magnet link or the address of a `.torrent` file for download. The engine picks
+    /// it up like any other source; nothing of it is installed automatically.
+    pub fn enqueue_torrent(&self, appid: u32, title: &str, source: &str) -> Result<Download> {
+        let (url, option_id) = torrent_source(source)?;
+        let library_dir = PathBuf::from(self.settings()?.library_dir);
+        let new = NewDownload {
+            store: Store::Web,
+            source_kind: DownloadSourceKind::Torrent,
+            product_id: &appid.to_string(),
+            appid: Some(appid),
+            title,
+            option_id: &option_id,
+            option_label: Some(title),
+            platform: Some(sources::this_platform()),
+            files: &[(sources::Source::Torrent(url), None)],
         };
         let mut writer = lock(&self.writer);
         self.downloads
@@ -699,6 +752,17 @@ impl App {
 
     pub fn list_links(&self, appid: u32) -> Result<Vec<GameLink>> {
         links::list_links(lock(&self.reader).conn(), appid)
+    }
+
+    /// Searches the known sites for this game and returns the links they offer.
+    pub fn find_links(&self, appid: u32) -> Result<Vec<FoundLink>> {
+        let game = self.get_game(appid)?.ok_or(Error::NotFound)?;
+        let query = find::FindQuery {
+            appid,
+            title: game.card.name.clone(),
+        };
+        let http = find::client()?;
+        Ok(self.sites.find_all(&query, &http))
     }
 
     pub fn save_link(&self, input: &LinkInput) -> Result<GameLink> {
@@ -844,6 +908,18 @@ where
     })
 }
 
+/// The address to hand the torrent engine and the id that keeps the same torrent from being
+/// queued twice: a magnet's info hash, or the `.torrent` address itself.
+fn torrent_source(input: &str) -> Result<(String, String)> {
+    if input.trim().to_ascii_lowercase().starts_with("magnet:") {
+        let magnet = validate::parse_magnet_url(input)?;
+        let hash = validate::magnet_info_hash(&magnet).ok_or(Error::Invalid("torrent_parse"))?;
+        return Ok((magnet, hash));
+    }
+    let url = validate::parse_link_url(input)?.to_string();
+    Ok((url.clone(), url))
+}
+
 /// Store page of a game, on the web or in the Steam client.
 pub fn steam_url(appid: u32, target: OpenTarget) -> String {
     match target {
@@ -898,6 +974,8 @@ pub fn account_page(store: Store) -> &'static str {
     match store {
         Store::Gog => "https://www.gog.com/account",
         Store::Itch => "https://itch.io/user/settings/api-keys",
+        // Web downloads have no account to manage.
+        Store::Web => "",
     }
 }
 
@@ -906,6 +984,8 @@ fn store_domains(store: Store) -> &'static [&'static str] {
     match store {
         Store::Gog => &["gog.com"],
         Store::Itch => &["itch.io"],
+        // Web downloads have no product pages.
+        Store::Web => &[],
     }
 }
 

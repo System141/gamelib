@@ -16,6 +16,9 @@ gamelib-core = { path = "crates/gamelib-core" }
 # Same version as Tauri uses, so default paths match the desktop app's.
 dirs = "7"
 reqwest = { version = "0.13.5", features = ["blocking", "json", "gzip", "query"] }
+# Apache-2.0 torrent engine (see THIRD_PARTY_NOTICES.md); only `downloads/torrent.rs` uses it.
+librqbit = "9.0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

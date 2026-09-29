@@ -9,18 +9,24 @@ export function SmallButton({
   icon,
   tone = "default",
   disabled,
+  title,
+  ariaLabel,
 }: {
   children: ReactNode;
   onClick: () => void;
   icon?: ReactNode;
   tone?: "default" | "primary" | "danger";
   disabled?: boolean;
+  title?: string;
+  ariaLabel?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
+      aria-label={ariaLabel}
       className={clsx(
         "inline-flex h-7.5 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium ring-1 transition disabled:opacity-60",
         tone === "primary" && "bg-accent/15 text-accent-soft ring-accent/35 hover:bg-accent/25",

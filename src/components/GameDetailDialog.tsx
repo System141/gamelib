@@ -217,7 +217,7 @@ function Detail({
 
           <StoresSection appid={game.appid} onStoreSync={onStoreSync} />
 
-          <LinksSection appid={game.appid} />
+          <LinksSection appid={game.appid} gameTitle={game.name} />
         </div>
 
         <aside className="h-fit space-y-4 rounded-2xl bg-ink-800/70 p-5 ring-1 ring-white/6">

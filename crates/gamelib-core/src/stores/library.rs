@@ -96,6 +96,8 @@ pub fn sign_out(db: &Db, secrets: &SecretStore, store: Store) -> Result<()> {
     secrets.update(|s| match store {
         Store::Gog => s.gog = None,
         Store::Itch => s.itch = None,
+        // Web has no account to forget.
+        Store::Web => {}
     })?;
     store_db::clear_owned(db.conn(), store)
 }

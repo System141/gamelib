@@ -11,6 +11,7 @@ bzip2 = "0.6"
 dirs.workspace = true
 flate2 = "1.1"
 fs4 = "1.1"
+librqbit.workspace = true
 lzma-rust2 = { version = "0.16", default-features = false, features = ["std", "xz"] }
 md-5 = "0.10"
 reqwest.workspace = true
@@ -21,6 +22,7 @@ serde_json.workspace = true
 sevenz-rust2 = { version = "0.20", default-features = false, features = ["bzip2", "deflate", "ppmd"] }
 tar = { version = "0.4.46", default-features = false }
 thiserror.workspace = true
+tokio.workspace = true
 toml = { version = "0.8", default-features = false, features = ["parse"] }
 zip = { version = "8.6", default-features = false, features = ["bzip2", "deflate-flate2-zlib-rs", "deflate64", "lzma", "xz"] }
 

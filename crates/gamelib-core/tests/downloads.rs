@@ -11,8 +11,9 @@ use std::time::Duration;
 use common::http::{Request, Response, TestServer};
 use gamelib_core::app::{App, EventSink, JobOptions};
 use gamelib_core::db::Db;
+use gamelib_core::db::downloads as download_db;
 use gamelib_core::db::stores::{insert_extra_product, set_owned};
-use gamelib_core::downloads::sources::this_platform;
+use gamelib_core::downloads::sources::{Source, this_platform};
 use gamelib_core::downloads::{EVENT_PROGRESS, EVENT_STATE};
 use gamelib_core::install::EVENT_CHANGED;
 use gamelib_core::model::{
@@ -676,6 +677,63 @@ fn itch_uploads_follow_the_redirect_with_the_download_key() {
     assert_eq!(d.title, "Celeste");
     s.events.state(d.id, "completed");
     assert_eq!(read(&d.dir, "celeste-win.zip"), game);
+}
+
+#[test]
+fn direct_sources_round_trip() {
+    let s = Source::Direct("https://cdn.example.com/game.zip".into());
+    assert_eq!(Source::from_db(&s.to_db()), Some(s));
+    assert_eq!(Source::from_db("other:1"), None);
+}
+
+#[test]
+fn captured_downloads_are_queued_and_downloaded() {
+    let bytes = data(60_000, 6);
+    let served = bytes.clone();
+    let server = TestServer::start(move |req: &Request| {
+        if req.path == "/cdn/captured.bin" {
+            serve_file(req, &served)
+        } else {
+            Response::status(404)
+        }
+    });
+    let s = setup("captured", &server.base, false, false);
+    let url = format!("{}/cdn/captured.bin", server.base);
+    let d = s
+        .app
+        .enqueue_captured(570, "Doki Doki Literature Club", &url, "doki-doki.zip")
+        .unwrap();
+    assert_eq!(d.store, Store::Web);
+    assert_eq!(d.appid, Some(570));
+    assert_eq!(d.option_id, "doki-doki.zip");
+    assert_eq!(d.option_label.as_deref(), Some("doki-doki.zip"));
+    assert_eq!(d.platform, Some(Platform::Win));
+    assert_eq!(d.state, DownloadState::Queued);
+    assert_eq!(d.files, 1);
+
+    let db = Db::open(&s.dir.0.join("gamelib.db")).unwrap();
+    let rows = download_db::files(db.conn(), d.id).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].source, Source::Direct(url));
+
+    s.app.start_downloads().unwrap();
+    s.events.state(d.id, "completed");
+    assert_eq!(read(&d.dir, "captured.bin"), bytes);
+}
+
+#[test]
+fn captured_downloads_reject_non_http_urls() {
+    let s = setup("captured-bad", "http://127.0.0.1:1", false, false);
+    assert!(matches!(
+        s.app
+            .enqueue_captured(570, "Game", "ftp://example.com/game.zip", "game.zip"),
+        Err(Error::Invalid("url_scheme"))
+    ));
+    assert!(matches!(
+        s.app
+            .enqueue_captured(570, "Game", "javascript:alert(1)", "game.zip"),
+        Err(Error::Invalid("url_parse"))
+    ));
 }
 
 // --- installs ------------------------------------------------------------------------------------
