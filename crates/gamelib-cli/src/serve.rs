@@ -232,6 +232,20 @@ struct PatchArgs {
     patch: SettingsPatch,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HiddenArgs {
+    product_id: String,
+    hidden: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FoundMatchArgs {
+    product_id: String,
+    appid: Option<u32>,
+}
+
 /// Commands that need the desktop app's windows or dialogs.
 fn desktop_only() -> ErrorInfo {
     ErrorInfo {
@@ -305,7 +319,7 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         "gog_login_url" => json!(app.gog_login_url()),
         "open_gog_login_page" => json!({ "url": app.gog_login_url() }),
         // The sign-in window is the desktop app's; the preview pastes the redirect instead.
-        "gog_login" | "pick_library_dir" => return Err(desktop_only()),
+        "gog_login" | "pick_library_dir" | "pick_scan_dir" => return Err(desktop_only()),
         "gog_login_with_code" => {
             to_json(&app.gog_login_with_code(&parse::<RedirectArgs>(args)?.redirect)?)
         }
@@ -337,6 +351,18 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         }
         "get_downloads" => to_json(&app.downloads()?),
         "get_installs" => to_json(&app.installs()?),
+        // Scans read this computer's disks, which the server shares with the browser.
+        "scan_installed" => to_json(&app.scan_installed()?),
+        "set_found_hidden" => {
+            let a: HiddenArgs = parse(args)?;
+            app.set_found_hidden(&a.product_id, a.hidden)?;
+            Value::Null
+        }
+        "get_hidden_found" => to_json(&app.hidden_found()?),
+        "match_found" => {
+            let a: FoundMatchArgs = parse(args)?;
+            to_json(&app.match_found(&a.product_id, a.appid)?)
+        }
         // Only the desktop app downloads (the preview server never starts the queue).
         "enqueue_download"
         | "enqueue_torrent"

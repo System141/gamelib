@@ -2,7 +2,19 @@
 // state of a finished download's install.
 
 import clsx from "clsx";
-import { Check, FileSearch, FolderOpen, LoaderCircle, MoreHorizontal, Play, RotateCcw, ShieldAlert, Trash2 } from "lucide-react";
+import {
+  Check,
+  EyeOff,
+  FileSearch,
+  FolderOpen,
+  Link2,
+  LoaderCircle,
+  MoreHorizontal,
+  Play,
+  RotateCcw,
+  ShieldAlert,
+  Trash2,
+} from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,6 +25,7 @@ import { showToast } from "../lib/toast";
 import type { Download, Installed, InstallProgress, Store } from "../lib/types";
 import { installOf, useInstalls } from "../hooks/useData";
 import { useModalHost } from "./Feedback";
+import { FoundMatchDialog } from "./FoundMatchDialog";
 import { IconButton, SmallButton } from "./ui";
 
 /** The installed copy of a store product, if any. */
@@ -46,12 +59,41 @@ export function useInstallActions() {
           showToast({ tone: "success", title: tr.install.toastTarget });
         })
         .catch(fail),
+    /** GameLib's own installs are removed; a game Steam installed opens Steam's dialog. */
     uninstall: (i: Installed) =>
       api
         .uninstallGame(i.store, i.productId)
         .then(() => {
           refresh();
-          showToast({ tone: "success", title: tr.install.toastUninstalled(i.title) });
+          showToast(
+            i.store === "local"
+              ? { tone: "info", title: tr.found.toastSteamUninstall(i.title) }
+              : { tone: "success", title: tr.install.toastUninstalled(i.title) },
+          );
+        })
+        .catch(fail),
+    /** Takes a found game off the list (its files stay); the toast can undo it. */
+    hide: (i: Installed) =>
+      api
+        .setFoundHidden(i.productId, true)
+        .then(() => {
+          refresh();
+          void qc.invalidateQueries({ queryKey: ["hidden-found"] });
+          showToast({
+            tone: "info",
+            title: tr.found.toastHidden(i.title),
+            action: {
+              label: tr.found.unhide,
+              onClick: () =>
+                void api
+                  .setFoundHidden(i.productId, false)
+                  .then(() => {
+                    refresh();
+                    void qc.invalidateQueries({ queryKey: ["hidden-found"] });
+                  })
+                  .catch(fail),
+            },
+          });
         })
         .catch(fail),
     approve: (d: Download) => void api.approveInstall(d.id).catch(fail),
@@ -62,7 +104,7 @@ export function useInstallActions() {
 /** "Oyna", or choosing what to start when that is not known yet. */
 export function PlayButton({ installed }: { installed: Installed }) {
   const act = useInstallActions();
-  if (!installed.exe) {
+  if (!installed.exe && !installed.launchUrl) {
     return (
       <SmallButton tone="primary" onClick={() => act.chooseTarget(installed)} icon={<FileSearch size={13} />}>
         {tr.install.chooseTarget}
@@ -87,6 +129,10 @@ export function InstallMenu({ installed, placement = "up" }: { installed: Instal
   const [position, setPosition] = useState<CSSProperties | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [matching, setMatching] = useState(false);
+  const found = installed.store === "local";
+  // Steam and Epic games start through their launcher; only folder games start a program.
+  const ownProgram = !installed.launchUrl;
   const anchor = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const open = position != null;
@@ -180,37 +226,63 @@ export function InstallMenu({ installed, placement = "up" }: { installed: Instal
                     {tr.install.openFolder}
                   </MenuItem>
                 )}
-                {installed.dir && <div className="my-1 h-px bg-white/8" />}
-                <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-ink-500 uppercase">
-                  {tr.install.target}
-                </div>
-                {installed.candidates.map((path) => (
-                  <MenuItem
-                    key={path}
-                    icon={path === installed.exe ? <Check size={14} className="text-success" /> : <span className="size-3.5" />}
-                    onClick={() => (close(), act.chooseTarget(installed, path))}
-                    title={path}
-                  >
-                    <span className="truncate">{relative(path, installed.dir)}</span>
-                  </MenuItem>
-                ))}
-                {installed.exe && !installed.candidates.includes(installed.exe) && (
-                  <MenuItem icon={<Check size={14} className="text-success" />} onClick={close} title={installed.exe}>
-                    <span className="truncate">{relative(installed.exe, installed.dir)}</span>
+                {found && installed.source !== "steam" && (
+                  <MenuItem icon={<Link2 size={14} />} onClick={() => (close(), setMatching(true))}>
+                    {installed.appid != null ? tr.found.changeMatch : tr.found.matchLong}
                   </MenuItem>
                 )}
-                <MenuItem icon={<FileSearch size={14} />} onClick={() => (close(), act.chooseTarget(installed))}>
-                  {tr.install.otherFile}
-                </MenuItem>
+                {ownProgram && (
+                  <>
+                    {(installed.dir || found) && <div className="my-1 h-px bg-white/8" />}
+                    <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold tracking-wider text-ink-500 uppercase">
+                      {tr.install.target}
+                    </div>
+                    {installed.candidates.map((path) => (
+                      <MenuItem
+                        key={path}
+                        icon={path === installed.exe ? <Check size={14} className="text-success" /> : <span className="size-3.5" />}
+                        onClick={() => (close(), act.chooseTarget(installed, path))}
+                        title={path}
+                      >
+                        <span className="truncate">{relative(path, installed.dir)}</span>
+                      </MenuItem>
+                    ))}
+                    {installed.exe && !installed.candidates.includes(installed.exe) && (
+                      <MenuItem icon={<Check size={14} className="text-success" />} onClick={close} title={installed.exe}>
+                        <span className="truncate">{relative(installed.exe, installed.dir)}</span>
+                      </MenuItem>
+                    )}
+                    <MenuItem icon={<FileSearch size={14} />} onClick={() => (close(), act.chooseTarget(installed))}>
+                      {tr.install.otherFile}
+                    </MenuItem>
+                  </>
+                )}
                 <div className="my-1 h-px bg-white/8" />
-                <MenuItem icon={<Trash2 size={14} />} danger onClick={() => setConfirm(true)}>
-                  {tr.install.uninstall}
-                </MenuItem>
+                {!found ? (
+                  <MenuItem icon={<Trash2 size={14} />} danger onClick={() => setConfirm(true)}>
+                    {tr.install.uninstall}
+                  </MenuItem>
+                ) : (
+                  <>
+                    {installed.source === "steam" && installed.appid != null && (
+                      <MenuItem icon={<Trash2 size={14} />} danger onClick={() => (close(), void act.uninstall(installed))}>
+                        {tr.found.steamUninstall}
+                      </MenuItem>
+                    )}
+                    <MenuItem icon={<EyeOff size={14} />} onClick={() => (close(), void act.hide(installed))} title={tr.found.hideHint}>
+                      {tr.found.hide}
+                    </MenuItem>
+                    {installed.source === "epic" && (
+                      <p className="px-2.5 pt-1 pb-1.5 text-[11.5px] leading-relaxed text-ink-500">{tr.found.epicHint}</p>
+                    )}
+                  </>
+                )}
               </>
             )}
           </div>,
           host,
         )}
+      {matching && <FoundMatchDialog installed={installed} onClose={() => setMatching(false)} />}
     </div>
   );
 }

@@ -729,16 +729,21 @@ pub enum Store {
     Itch,
     /// A download captured from the in-app browser, not tied to a store account.
     Web,
+    /// A game found on this computer (in Steam's or Epic's library, or a game folder), installed
+    /// outside GameLib. Its product id says where: `steam:<appid>`, `epic:<app name>` or
+    /// `folder:<path>`.
+    Local,
 }
 
 impl Store {
-    pub const ALL: [Store; 3] = [Store::Gog, Store::Itch, Store::Web];
+    pub const ALL: [Store; 4] = [Store::Gog, Store::Itch, Store::Web, Store::Local];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Store::Gog => "gog",
             Store::Itch => "itch",
             Store::Web => "web",
+            Store::Local => "local",
         }
     }
 
@@ -747,6 +752,7 @@ impl Store {
             "gog" => Some(Store::Gog),
             "itch" => Some(Store::Itch),
             "web" => Some(Store::Web),
+            "local" => Some(Store::Local),
             _ => None,
         }
     }
@@ -951,6 +957,8 @@ pub struct Settings {
     pub keep_installers: bool,
     /// Look for app updates on start and every few hours.
     pub auto_update: bool,
+    /// Folders whose game folders count as installed games, besides the library folder.
+    pub scan_dirs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -959,6 +967,7 @@ pub struct SettingsPatch {
     pub library_dir: Option<String>,
     pub keep_installers: Option<bool>,
     pub auto_update: Option<bool>,
+    pub scan_dirs: Option<Vec<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1159,6 +1168,8 @@ pub enum InstallMethod {
     Installer,
     /// Installed outside GameLib (GOG Galaxy or a GOG installer run by hand).
     Galaxy,
+    /// Found on this computer: in Steam's or Epic's library, or in a game folder.
+    Found,
 }
 
 impl InstallMethod {
@@ -1169,6 +1180,7 @@ impl InstallMethod {
             InstallMethod::Portable => "portable",
             InstallMethod::Installer => "installer",
             InstallMethod::Galaxy => "galaxy",
+            InstallMethod::Found => "found",
         }
     }
 
@@ -1179,6 +1191,7 @@ impl InstallMethod {
             InstallMethod::Portable,
             InstallMethod::Installer,
             InstallMethod::Galaxy,
+            InstallMethod::Found,
         ]
         .into_iter()
         .find(|m| m.as_str() == s)
@@ -1207,10 +1220,99 @@ pub struct Installed {
     /// The variant installed (e.g. "Windows · Türkçe · 1.6.2").
     pub option_label: Option<String>,
     pub installed_at: i64,
-    /// Found in GOG's registry entries rather than installed by GameLib.
+    /// Installed outside GameLib: found in GOG's registry entries, in a launcher's library or
+    /// in a game folder.
     pub external: bool,
     /// The matched Steam game's header image.
     pub steam_header: Option<String>,
+    /// Where a found game was found.
+    pub source: Option<FoundSource>,
+    /// A found game that starts through its launcher: the address that asks it to.
+    pub launch_url: Option<String>,
+    /// How a found game was tied to its Steam game.
+    pub matched_by: Option<FoundMatch>,
+}
+
+/// Where a game installed outside GameLib was found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FoundSource {
+    Steam,
+    Epic,
+    /// A folder in the library or one the user added.
+    Folder,
+}
+
+impl FoundSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FoundSource::Steam => "steam",
+            FoundSource::Epic => "epic",
+            FoundSource::Folder => "folder",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        [FoundSource::Steam, FoundSource::Epic, FoundSource::Folder]
+            .into_iter()
+            .find(|f| f.as_str() == s)
+    }
+}
+
+/// How a found game was tied to a Steam game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FoundMatch {
+    /// Steam's own library says so.
+    Steam,
+    /// The folder's GOG game, matched to Steam by the store matching.
+    Gog,
+    /// The folder's itch.io game, matched to Steam by the store matching.
+    Itch,
+    /// A `steam_appid.txt` in the folder.
+    SteamAppid,
+    /// The only Steam game with that title.
+    Title,
+    /// Chosen by the user (possibly "none").
+    Manual,
+}
+
+impl FoundMatch {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FoundMatch::Steam => "steam",
+            FoundMatch::Gog => "gog",
+            FoundMatch::Itch => "itch",
+            FoundMatch::SteamAppid => "steam_appid",
+            FoundMatch::Title => "title",
+            FoundMatch::Manual => "manual",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        [
+            FoundMatch::Steam,
+            FoundMatch::Gog,
+            FoundMatch::Itch,
+            FoundMatch::SteamAppid,
+            FoundMatch::Title,
+            FoundMatch::Manual,
+        ]
+        .into_iter()
+        .find(|m| m.as_str() == s)
+    }
+}
+
+/// What a scan for installed games found.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanReport {
+    /// Games found (hidden ones included).
+    pub found: u32,
+    /// Of them, seen for the first time.
+    pub added: u32,
+    /// Games no longer there.
+    pub removed: u32,
 }
 
 /// Progress of the running install (payload of `install:progress`).

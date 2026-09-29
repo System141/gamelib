@@ -291,6 +291,32 @@ UPDATE game_links
     OR substr(game_links.url, 1, length(old.prefix) + 1) = old.prefix || '/';
 "#;
 
+/// Games found on this computer outside GameLib: in Steam's and Epic's libraries and in game
+/// folders. Scans refresh them; what the user chose (hiding one, its Steam game, what to start)
+/// survives the scans.
+const MIGRATION_8: &str = r#"
+CREATE TABLE found_games(
+  id          TEXT PRIMARY KEY,
+  source      TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  dir         TEXT NOT NULL,
+  root        TEXT NOT NULL,
+  appid       INTEGER,
+  matched_by  TEXT,
+  exe         TEXT,
+  args        TEXT NOT NULL DEFAULT '',
+  workdir     TEXT,
+  exe_by_user INTEGER NOT NULL DEFAULT 0,
+  launch_url  TEXT,
+  candidates  TEXT NOT NULL DEFAULT '[]',
+  hidden      INTEGER NOT NULL DEFAULT 0,
+  found_at    INTEGER NOT NULL,
+  seen_at     INTEGER NOT NULL
+) WITHOUT ROWID;
+
+CREATE INDEX idx_found_games_appid ON found_games(appid);
+"#;
+
 const MIGRATIONS: &[&str] = &[
     MIGRATION_1,
     MIGRATION_2,
@@ -299,6 +325,7 @@ const MIGRATIONS: &[&str] = &[
     MIGRATION_5,
     MIGRATION_6,
     MIGRATION_7,
+    MIGRATION_8,
 ];
 
 /// Schema version this build expects.

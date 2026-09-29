@@ -25,6 +25,7 @@ import type {
   LinkCheck,
   LinkInput,
   MatchState,
+  ScanReport,
   Settings,
   SettingsPatch,
   SiteInfo,
@@ -110,6 +111,14 @@ export const api = {
   setLaunchTarget: (store: Store, productId: string, exe: string) => invoke<Installed>("set_launch_target", { store, productId, exe }),
   /** Desktop only: a file picker; null when cancelled. */
   pickLaunchTarget: (store: Store, productId: string) => invoke<Installed | null>("pick_launch_target", { store, productId }),
+  /** Looks for games installed outside GameLib (Steam, Epic Games, game folders). */
+  scanInstalled: () => invoke<ScanReport>("scan_installed"),
+  setFoundHidden: (productId: string, hidden: boolean) => invoke<void>("set_found_hidden", { productId, hidden }),
+  getHiddenFound: () => invoke<Installed[]>("get_hidden_found"),
+  /** Ties a found game to a Steam game, or (null) to none. */
+  matchFound: (productId: string, appid: number | null) => invoke<Installed>("match_found", { productId, appid }),
+  /** Desktop only: adds a game folder picked in a folder dialog; null when cancelled. */
+  pickScanDir: () => invoke<Settings | null>("pick_scan_dir"),
   listSites: () => invoke<SiteInfo[]>("list_sites"),
   listLinks: (appid: number) => invoke<GameLink[]>("list_links", { appid }),
   findLinks: (appid: number) => invoke<FoundLink[]>("find_links", { appid }),

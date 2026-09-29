@@ -14,6 +14,8 @@ import type {
   DownloadProgress,
   FileOption,
   FoundLink,
+  FoundMatch,
+  FoundSource,
   Installed,
   InstallProgress,
   GameCard,
@@ -29,6 +31,7 @@ import type {
   LinkCheck,
   LinkInput,
   MatchState,
+  ScanReport,
   Settings,
   SiteInfo,
   Store,
@@ -111,6 +114,9 @@ const SITES: SiteInfo[] = [
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const invalid = (message: string): CmdError => ({ kind: "invalid", message });
 
+/** A found game with what the mock needs to remember about it. */
+type FoundGame = Installed & { hidden: boolean; foundTitle: string };
+
 export class MockBackend {
   private all: GameDetail[];
   private present = new Set<number>();
@@ -130,7 +136,9 @@ export class MockBackend {
   /** Owned products as `store:productId`. */
   private owned = new Set<string>();
   private itchLibrary: LibraryItem[] = [];
-  private settings: Settings = { libraryDir: "C:\\Users\\oyuncu\\Games", keepInstallers: false, autoUpdate: true };
+  private settings: Settings = { libraryDir: "C:\\Users\\oyuncu\\Games", keepInstallers: false, autoUpdate: true, scanDirs: [] };
+  /** Games "found" on this computer by the last scan. */
+  private found: FoundGame[] = [];
   private downloads: Download[] = [];
   private live: DownloadProgress | null = null;
   private installs: Installed[] = [];
@@ -266,8 +274,27 @@ export class MockBackend {
         return this.settings;
       case "update_settings":
         if (args.patch.libraryDir != null && !/^([a-z]:\\|\/)/i.test(args.patch.libraryDir)) throw invalid("library_dir");
+        if (args.patch.scanDirs?.some((d: string) => !/^([a-z]:\\|\/)/i.test(d.trim()))) throw invalid("scan_dir");
         this.settings = { ...this.settings, ...args.patch };
         return this.settings;
+      case "pick_scan_dir":
+        await sleep(300);
+        this.settings = { ...this.settings, scanDirs: [...new Set([...this.settings.scanDirs, "E:\\Oyunlar"])] };
+        return this.settings;
+      case "scan_installed":
+        await sleep(700);
+        return this.scanInstalled();
+      case "set_found_hidden": {
+        const game = this.found.find((f) => f.productId === args.productId);
+        if (!game) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+        game.hidden = args.hidden;
+        this.emit("install:changed", { store: "local", productId: game.productId });
+        return null;
+      }
+      case "get_hidden_found":
+        return this.found.filter((f) => f.hidden);
+      case "match_found":
+        return this.matchFound(args.productId, args.appid);
       case "pick_library_dir":
         await sleep(300);
         this.settings = { ...this.settings, libraryDir: "D:\\Oyunlar" };
@@ -297,15 +324,25 @@ export class MockBackend {
       case "retry_install":
         return this.moveInstall(args.id, [null, "failed"], "waiting");
       case "get_installs":
-        return this.installs;
+        return [...this.installs, ...this.found.filter((f) => !f.hidden)].sort((a, b) => a.title.localeCompare(b.title, "tr"));
       case "launch_game": {
-        const game = this.installs.find((i) => i.store === args.store && i.productId === args.productId);
+        const game = this.installed(args.store, args.productId);
         if (!game) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+        if (!game.exe && game.launchUrl) {
+          console.info("[mock] open", game.launchUrl);
+          return null;
+        }
         if (!game.exe) throw invalid("launch_target");
         console.info("[mock] launch", game.exe);
         return null;
       }
       case "uninstall_game":
+        if (args.store === "local") {
+          const game = this.found.find((f) => f.productId === args.productId);
+          if (game?.source !== "steam" || game.appid == null) throw invalid("found_uninstall");
+          console.info("[mock] open", `steam://uninstall/${game.appid}`);
+          return null;
+        }
         await sleep(900);
         return this.uninstall(args.store, args.productId);
       case "open_install_folder":
@@ -314,7 +351,7 @@ export class MockBackend {
       case "set_launch_target":
         return this.setTarget(args.store, args.productId, args.exe);
       case "pick_launch_target": {
-        const game = this.installs.find((i) => i.store === args.store && i.productId === args.productId);
+        const game = this.installed(args.store, args.productId);
         return game ? this.setTarget(args.store, args.productId, `${game.dir ?? "C:\\Program Files\\Game"}\\Game.exe`) : null;
       }
       case "pause_download":
@@ -855,6 +892,9 @@ export class MockBackend {
       installedAt: nowSeconds(),
       external: false,
       steamHeader: d.appid != null ? (this.all.find((g) => g.appid === d.appid)?.header ?? null) : null,
+      source: null,
+      launchUrl: null,
+      matchedBy: null,
     };
     this.installs = [...this.installs.filter((i) => !(i.store === d.store && i.productId === d.productId)), game];
     this.emit("install:changed", { store: d.store, productId: d.productId });
@@ -872,12 +912,123 @@ export class MockBackend {
     return null;
   }
 
+  private installed(store: Store, productId: string): Installed | undefined {
+    return store === "local"
+      ? this.found.find((f) => f.productId === productId)
+      : this.installs.find((i) => i.store === store && i.productId === productId);
+  }
+
   private setTarget(store: Store, productId: string, exe: string): Installed {
-    const game = this.installs.find((i) => i.store === store && i.productId === productId);
+    const game = this.installed(store, productId);
     if (!game) throw { kind: "not_found", message: "not found" } satisfies CmdError;
-    if (!/^([a-z]:\\|\/)/i.test(exe)) throw invalid("launch_target");
+    if (!/^([a-z]:\\|\/)/i.test(exe) || game.launchUrl) throw invalid("launch_target");
     Object.assign(game, { exe, args: "", workdir: null });
     this.emit("install:changed", { store, productId });
+    return { ...game };
+  }
+
+  // --- games found on this computer -------------------------------------------------------------
+
+  /** What a scan of this pretend computer finds: two Steam games, one Epic game and game folders
+   *  (one more when the user added "E:\\Oyunlar"). */
+  private foundOnDisk(): FoundGame[] {
+    const lib = this.settings.libraryDir;
+    const steam = "C:\\Program Files (x86)\\Steam\\steamapps\\common";
+    const games = [
+      this.foundGame("steam", "1086940", "Baldur's Gate 3", `${steam}\\Baldurs Gate 3`, 1086940, "steam", {
+        launchUrl: "steam://rungameid/1086940",
+      }),
+      this.foundGame("steam", "620", "Portal 2", `${steam}\\Portal 2`, 620, "steam", { launchUrl: "steam://rungameid/620" }),
+      this.foundGame("epic", "Calluna", "Control", "C:\\Program Files\\Epic Games\\Control", null, null, {
+        launchUrl: "com.epicgames.launcher://apps/calluna%3Ac8e4d9b0%3ACalluna?action=launch&silent=true",
+      }),
+      this.folderGame(`${lib}\\HollowKnight`, "HollowKnight", 367520, "title", ["hollow_knight.exe", "Tools\\modinstaller.exe"]),
+      this.folderGame(`${lib}\\UT`, "UT", 391540, "steam_appid", ["UNDERTALE.exe"]),
+      this.folderGame(`${lib}\\Retro Pack`, "Retro Pack", null, null, ["launcher.exe", "dosbox\\dosbox.exe"]),
+    ];
+    if (this.settings.scanDirs.some((d) => d.toLowerCase().startsWith("e:\\oyunlar"))) {
+      games.push(this.folderGame("E:\\Oyunlar\\Subnautica", "Subnautica", 264710, "title", ["Subnautica.exe"]));
+    }
+    return games;
+  }
+
+  private foundGame(
+    source: FoundSource,
+    id: string,
+    title: string,
+    dir: string,
+    appid: number | null,
+    matchedBy: FoundMatch | null,
+    extra: Partial<Installed>,
+  ): FoundGame {
+    const game = appid != null ? this.all.find((g) => g.appid === appid) : undefined;
+    return {
+      store: "local",
+      productId: `${source}:${source === "folder" ? dir : id}`,
+      appid,
+      title: game?.name ?? title,
+      dir,
+      exe: null,
+      args: "",
+      workdir: null,
+      method: "found",
+      candidates: [],
+      optionLabel: null,
+      installedAt: nowSeconds() - 30 * 86_400,
+      external: true,
+      steamHeader: game?.header ?? null,
+      source,
+      launchUrl: null,
+      matchedBy,
+      ...extra,
+      hidden: false,
+      foundTitle: title,
+    };
+  }
+
+  private folderGame(dir: string, title: string, appid: number | null, matchedBy: FoundMatch | null, programs: string[]): FoundGame {
+    const candidates = programs.map((p) => `${dir}\\${p}`);
+    return this.foundGame("folder", dir, title, dir, appid, matchedBy, { exe: candidates[0] ?? null, candidates });
+  }
+
+  /** Keeps what the user chose (hidden, a Steam game picked by hand, a program) across scans. */
+  private scanInstalled(): ScanReport {
+    const before = new Map(this.found.map((f) => [f.productId, f]));
+    const now = this.foundOnDisk();
+    this.found = now.map((f) => {
+      const old = before.get(f.productId);
+      if (!old) return f;
+      const manual = old.matchedBy === "manual";
+      return {
+        ...f,
+        hidden: old.hidden,
+        exe: old.exe,
+        appid: manual ? old.appid : f.appid,
+        matchedBy: manual ? "manual" : f.matchedBy,
+        title: manual ? old.title : f.title,
+        steamHeader: manual ? old.steamHeader : f.steamHeader,
+      };
+    });
+    this.emit("install:changed", { store: "local", productId: null });
+    return {
+      found: now.length,
+      added: now.filter((f) => !before.has(f.productId)).length,
+      removed: [...before.keys()].filter((id) => !now.some((f) => f.productId === id)).length,
+    };
+  }
+
+  private matchFound(productId: string, appid: number | null): Installed {
+    const game = this.found.find((f) => f.productId === productId);
+    if (!game) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    const steam = appid != null ? this.all.find((g) => g.appid === appid) : undefined;
+    if (appid != null && !steam) throw { kind: "not_found", message: "not found" } satisfies CmdError;
+    Object.assign(game, {
+      appid,
+      matchedBy: "manual",
+      title: steam?.name ?? game.foundTitle,
+      steamHeader: steam?.header ?? null,
+    });
+    this.emit("install:changed", { store: "local", productId });
     return { ...game };
   }
 

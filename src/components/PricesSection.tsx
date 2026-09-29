@@ -106,7 +106,7 @@ export function ItadKeyForm() {
           placeholder={tr.accounts.keyPlaceholder}
           autoComplete="off"
           className="h-9 w-full rounded-lg bg-ink-900 pr-3 pl-8 font-mono text-[12.5px] text-ink-100 ring-1 ring-white/10 outline-none placeholder:font-sans placeholder:text-ink-500 focus:ring-accent/50"
-          aria-label={tr.accounts.keyPlaceholder}
+          aria-label={tr.accounts.itadKeyLabel}
         />
       </div>
       <button

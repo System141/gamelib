@@ -4,6 +4,7 @@
 //! WAL mode lets the UI read while a sync writes from another connection.
 
 pub mod downloads;
+pub mod found;
 pub mod installs;
 pub mod links;
 pub mod read;

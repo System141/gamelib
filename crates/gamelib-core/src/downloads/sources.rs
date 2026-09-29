@@ -128,8 +128,9 @@ pub fn offers(
             })?;
             itch_offers(&body)?
         }
-        // A captured URL is the file itself; there is no offers API to ask.
-        Store::Web => return Err(Error::Invalid("store")),
+        // A captured URL is the file itself, and a found game is already here: there is no
+        // offers API to ask.
+        Store::Web | Store::Local => return Err(Error::Invalid("store")),
     };
     recommend(&mut offers, this_platform());
     Ok(offers)

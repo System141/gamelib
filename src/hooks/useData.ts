@@ -1,7 +1,7 @@
 // Query hooks for catalog data, media and external links.
 
-import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type {
   Accounts,
@@ -280,6 +280,47 @@ export function downloadOf(list: DownloadList | undefined, store: Store, product
 /** Installed games; `useDownloadEvents` refreshes them when one changes. */
 export function useInstalls() {
   return useQuery({ queryKey: ["installs"], queryFn: api.getInstalls });
+}
+
+/** Found games the user took off the installed list. */
+export function useHiddenFound() {
+  return useQuery({ queryKey: ["hidden-found"], queryFn: api.getHiddenFound });
+}
+
+/** When the last scan for installed games started (this session). */
+let lastScan = 0;
+const SCAN_AGAIN_AFTER = 5 * 60_000;
+
+/** A scan for games installed outside GameLib; any component can see one running. */
+export function useScanInstalled() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ["scan-installed"],
+    mutationFn: api.scanInstalled,
+    onMutate: () => {
+      lastScan = Date.now();
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["installs"] });
+      void qc.invalidateQueries({ queryKey: ["hidden-found"] });
+    },
+  });
+}
+
+export function useScanningInstalled(): boolean {
+  return useIsMutating({ mutationKey: ["scan-installed"] }) > 0;
+}
+
+/** Scans shortly after `enabled` turns on, unless a scan ran in the last few minutes. */
+export function useAutoScan(enabled: boolean) {
+  const { mutate } = useScanInstalled();
+  useEffect(() => {
+    const due = () => Date.now() - lastScan >= SCAN_AGAIN_AFTER;
+    if (!enabled || !due()) return;
+    // Another caller may have started one meanwhile.
+    const timer = setTimeout(() => due() && mutate(), 800);
+    return () => clearTimeout(timer);
+  }, [enabled, mutate]);
 }
 
 export function installOf(list: Installed[] | undefined, store: Store, productId: string): Installed | undefined {

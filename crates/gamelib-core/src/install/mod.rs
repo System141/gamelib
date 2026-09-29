@@ -10,12 +10,16 @@
 //!   stays in the downloads folder for the user.
 
 pub mod archive;
+pub mod found;
 pub mod inspect;
 pub mod process;
+pub mod scan;
 pub mod targets;
+pub mod vdf;
 #[cfg(windows)]
 pub mod windows;
 
+use std::collections::HashSet;
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
@@ -480,6 +484,9 @@ fn install(
             installed_at: unix_now(),
             external: false,
             steam_header: None,
+            source: None,
+            launch_url: None,
+            matched_by: None,
         },
         uninstaller: uninstaller.as_deref().map(display),
     };
@@ -608,8 +615,8 @@ fn store_page(store: Store) -> &'static str {
     match store {
         Store::Gog => "https://www.gog.com/",
         Store::Itch => "https://itch.io/",
-        // Web downloads have no store page to mark.
-        Store::Web => "",
+        // Web downloads have no store page to mark (and found games are never downloaded).
+        Store::Web | Store::Local => "",
     }
 }
 
@@ -627,8 +634,9 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 // --- installed games ---------------------------------------------------------------------------
 
-/// Every installed game: GameLib's own installs, plus (on Windows) GOG games registered by GOG
-/// Galaxy or a GOG installer run by hand.
+/// Every installed game, by title: GameLib's own installs, (on Windows) GOG games registered by
+/// GOG Galaxy or a GOG installer run by hand, and the games scans found in Steam's and Epic's
+/// libraries and in game folders.
 pub fn list(conn: &Connection) -> Result<Vec<Installed>> {
     let mut all: Vec<Installed> = installs::list(conn)?
         .into_iter()
@@ -643,12 +651,36 @@ pub fn list(conn: &Connection) -> Result<Vec<Installed>> {
             all.push(external(conn, &game)?);
         }
     }
+    // A found game in a folder already listed is that game.
+    let listed: HashSet<String> = all
+        .iter()
+        .filter_map(|i| i.dir.as_deref())
+        .map(|d| scan::path_key(Path::new(d)))
+        .collect();
+    all.extend(found::listed(conn)?.into_iter().filter(|f| {
+        f.dir
+            .as_deref()
+            .is_none_or(|d| !listed.contains(&scan::path_key(Path::new(d))))
+    }));
+    all.sort_by_cached_key(|i| i.title.to_lowercase());
     for game in &mut all {
         if let Some(appid) = game.appid {
             game.steam_header = crate::db::stores::steam_header(conn, appid)?;
         }
     }
     Ok(all)
+}
+
+/// Folders of the games GameLib installed or GOG Galaxy registered, which scans leave alone.
+pub fn known_dirs(conn: &Connection) -> Result<Vec<PathBuf>> {
+    #[allow(unused_mut)]
+    let mut dirs: Vec<PathBuf> = installs::list(conn)?
+        .into_iter()
+        .filter_map(|r| r.installed.dir.map(PathBuf::from))
+        .collect();
+    #[cfg(windows)]
+    dirs.extend(windows::gog_registered_games().into_iter().map(|g| g.dir));
+    Ok(dirs)
 }
 
 #[cfg(windows)]
@@ -670,11 +702,18 @@ fn external(conn: &Connection, game: &windows::RegisteredGame) -> Result<Install
         installed_at: 0,
         external: true,
         steam_header: None,
+        source: None,
+        launch_url: None,
+        matched_by: None,
     })
 }
 
 /// An installed game and its uninstaller.
 fn find(conn: &Connection, store: Store, product_id: &str) -> Result<(Installed, Option<PathBuf>)> {
+    if store == Store::Local {
+        let row = crate::db::found::get(conn, product_id)?.ok_or(Error::NotFound)?;
+        return Ok((found::installed(row, None), None));
+    }
     if let Some(row) = installs::get(conn, store, product_id)? {
         return Ok((row.installed, row.uninstaller.map(PathBuf::from)));
     }
@@ -690,15 +729,22 @@ fn find(conn: &Connection, store: Store, product_id: &str) -> Result<(Installed,
     Err(Error::NotFound)
 }
 
-/// Starts an installed game.
-pub fn launch(conn: &Connection, store: Store, product_id: &str) -> Result<()> {
+/// Starts an installed game. A game that starts through its launcher (Steam, Epic Games) gives
+/// the address that asks the launcher to, for the caller to open.
+pub fn launch(conn: &Connection, store: Store, product_id: &str) -> Result<Option<String>> {
     let (game, _) = find(conn, store, product_id)?;
-    let exe = game.exe.ok_or(Error::Invalid("launch_target"))?;
-    process::launch(&LaunchTarget {
-        exe: PathBuf::from(exe),
-        args: game.args,
-        workdir: game.workdir.map(PathBuf::from),
-    })
+    match (game.exe, game.launch_url) {
+        (Some(exe), _) => {
+            process::launch(&LaunchTarget {
+                exe: PathBuf::from(exe),
+                args: game.args,
+                workdir: game.workdir.map(PathBuf::from),
+            })?;
+            Ok(None)
+        }
+        (None, Some(url)) => Ok(Some(url)),
+        (None, None) => Err(Error::Invalid("launch_target")),
+    }
 }
 
 /// The folder of an installed game.
@@ -725,6 +771,17 @@ pub fn set_launch_target(
         return Err(Error::Invalid("launch_target"));
     }
     let workdir = path.parent().map(display);
+    if store == Store::Local {
+        // Only a game found in a folder starts a program of its own; the others go through
+        // their launcher.
+        let row = crate::db::found::get(conn, product_id)?.ok_or(Error::NotFound)?;
+        if row.launch_url.is_some() {
+            return Err(Error::Invalid("launch_target"));
+        }
+        crate::db::found::set_launch(conn, product_id, exe, workdir.as_deref())?;
+        let row = crate::db::found::get(conn, product_id)?.ok_or(Error::NotFound)?;
+        return Ok(found::installed(row, None));
+    }
     if !installs::set_launch(conn, store, product_id, exe, workdir.as_deref())? {
         return Err(Error::NotFound);
     }
@@ -795,6 +852,8 @@ pub fn remove(removal: &Removal, library: &Path) -> Result<()> {
                 fs::remove_dir_all(dir).map_err(|e| io(dir, e))?;
             }
         }
+        // GameLib never deletes what it did not install; found games are hidden instead.
+        InstallMethod::Found => return Err(Error::Invalid("found_uninstall")),
     }
     Ok(())
 }

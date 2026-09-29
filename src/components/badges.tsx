@@ -2,7 +2,7 @@ import clsx from "clsx";
 import type { ReactNode } from "react";
 import { deckLabel, reviewLabel, tr } from "../i18n/tr";
 import { formatPercent, reviewTone, type ReviewTone } from "../lib/format";
-import type { DeckCompat, GameCard, Store } from "../lib/types";
+import type { DeckCompat, FoundSource, GameCard, Store } from "../lib/types";
 import { AppleIcon, LinuxIcon, SteamIcon, WindowsIcon } from "./icons";
 
 const TONE_TEXT: Record<ReviewTone, string> = {
@@ -156,6 +156,14 @@ const STORE_STYLE: Record<Store, { letter: string; className: string }> = {
   itch: { letter: "i", className: "bg-itch/15 text-itch ring-itch/35" },
   // Downloads captured from the in-app browser: no store of their own.
   web: { letter: "W", className: "bg-white/8 text-ink-200 ring-white/15" },
+  // Games found on this computer; their source has a mark of its own (FoundMark).
+  local: { letter: "B", className: "bg-white/8 text-ink-200 ring-white/15" },
+};
+
+const FOUND_STYLE: Record<FoundSource, { letter: string; className: string }> = {
+  steam: { letter: "S", className: "bg-accent/15 text-accent-soft ring-accent/35" },
+  epic: { letter: "E", className: "bg-white/10 text-ink-50 ring-white/25" },
+  folder: { letter: "K", className: "bg-warning/12 text-warning ring-warning/30" },
 };
 
 /** Small square store mark (the stores' own logos are trademarks, so a lettermark stands in). */
@@ -172,12 +180,49 @@ export function StoreMark({ store, size = 20, className }: { store: Store; size?
   );
 }
 
+/** A lettermark for where a game installed outside GameLib was found. */
+export function FoundMark({ source, size = 20, className }: { source: FoundSource; size?: number; className?: string }) {
+  const style = FOUND_STYLE[source];
+  return (
+    <span
+      className={clsx("inline-grid shrink-0 place-items-center rounded-md font-display font-bold ring-1", style.className, className)}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.58) }}
+      aria-hidden
+    >
+      {style.letter}
+    </span>
+  );
+}
+
 /** Pill colours, mirroring the store marks. */
 const STORE_PILL_TONE: Record<Store, string> = {
   gog: "text-gog ring-gog/40",
   itch: "text-itch ring-itch/40",
   web: "text-ink-200 ring-white/20",
+  local: "text-ink-200 ring-white/20",
 };
+
+const FOUND_PILL_TONE: Record<FoundSource, string> = {
+  steam: "text-accent-soft ring-accent/40",
+  epic: "text-ink-50 ring-white/30",
+  folder: "text-warning ring-warning/40",
+};
+
+/** Where a found game was found, as a pill like the store pills. */
+export function FoundPill({ source, className }: { source: FoundSource; className?: string }) {
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wide ring-1 backdrop-blur",
+        "bg-ink-950/80",
+        FOUND_PILL_TONE[source],
+        className,
+      )}
+    >
+      {tr.found.sources[source]}
+    </span>
+  );
+}
 
 /** Store name pill used on cards and in the detail view. */
 export function StorePill({ store, className }: { store: Store; className?: string }) {

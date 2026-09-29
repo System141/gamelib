@@ -7,8 +7,8 @@ use gamelib_core::app::{App, price_link, search_url, steam_url};
 use gamelib_core::model::{
     Accounts, AppStatus, Download, DownloadList, FileOption, FoundLink, GameDetail, GameLink,
     GameMedia, GamePage, GamePrices, GameQuery, GameRequirements, GameReviews, Installed,
-    LibraryItem, LinkCheck, LinkInput, MatchState, OpenTarget, SearchSite, Settings, SettingsPatch,
-    SiteInfo, Store, StoreMatch, StoreSearchHit, TagInfo,
+    LibraryItem, LinkCheck, LinkInput, MatchState, OpenTarget, ScanReport, SearchSite, Settings,
+    SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, TagInfo,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -271,6 +271,39 @@ pub async fn pick_library_dir(
         .map(Some)
 }
 
+/// Adds a game folder to scan, picked in the system's folder dialog; `None` if cancelled.
+#[tauri::command]
+pub async fn pick_scan_dir(
+    handle: AppHandle,
+    app: State<'_, Arc<App>>,
+) -> CmdResult<Option<Settings>> {
+    let current = blocking(&app, App::settings).await?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    handle
+        .dialog()
+        .file()
+        .set_title("Oyun klasörü")
+        .set_directory(&current.library_dir)
+        .pick_folder(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let picked = tauri::async_runtime::spawn_blocking(move || rx.recv().ok().flatten())
+        .await
+        .map_err(|e| CmdError::other(e.to_string()))?;
+    let Some(dir) = picked.and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let mut dirs = current.scan_dirs;
+    dirs.push(dir.display().to_string());
+    let patch = SettingsPatch {
+        scan_dirs: Some(dirs),
+        ..Default::default()
+    };
+    blocking(&app, move |app| app.update_settings(&patch))
+        .await
+        .map(Some)
+}
+
 // --- downloads ------------------------------------------------------------------------------
 
 /// What can be downloaded for a store product, the best variant for this computer first.
@@ -365,23 +398,64 @@ pub async fn get_installs(app: State<'_, Arc<App>>) -> CmdResult<Vec<Installed>>
     blocking(&app, App::installs).await
 }
 
+/// Starts a game: its program, or its launcher (Steam, Epic Games) asked to start it.
 #[tauri::command]
 pub async fn launch_game(
+    handle: AppHandle,
     app: State<'_, Arc<App>>,
     store: Store,
     product_id: String,
 ) -> CmdResult<()> {
-    blocking(&app, move |app| app.launch_game(store, &product_id)).await
+    match blocking(&app, move |app| app.launch_game(store, &product_id)).await? {
+        Some(url) => open_url(&handle, url),
+        None => Ok(()),
+    }
 }
 
-/// Runs the game's uninstaller (or deletes the folder GameLib unpacked it into).
+/// Runs the game's uninstaller (or deletes the folder GameLib unpacked it into); a game Steam
+/// installed opens Steam's uninstall dialog.
 #[tauri::command]
 pub async fn uninstall_game(
+    handle: AppHandle,
     app: State<'_, Arc<App>>,
     store: Store,
     product_id: String,
 ) -> CmdResult<()> {
-    blocking(&app, move |app| app.uninstall_game(store, &product_id)).await
+    match blocking(&app, move |app| app.uninstall_game(store, &product_id)).await? {
+        Some(url) => open_url(&handle, url),
+        None => Ok(()),
+    }
+}
+
+/// Looks for games installed outside GameLib (Steam, Epic Games, game folders).
+#[tauri::command]
+pub async fn scan_installed(app: State<'_, Arc<App>>) -> CmdResult<ScanReport> {
+    blocking(&app, App::scan_installed).await
+}
+
+/// Takes a found game off the installed list, or puts it back.
+#[tauri::command]
+pub async fn set_found_hidden(
+    app: State<'_, Arc<App>>,
+    product_id: String,
+    hidden: bool,
+) -> CmdResult<()> {
+    blocking(&app, move |app| app.set_found_hidden(&product_id, hidden)).await
+}
+
+#[tauri::command]
+pub async fn get_hidden_found(app: State<'_, Arc<App>>) -> CmdResult<Vec<Installed>> {
+    blocking(&app, App::hidden_found).await
+}
+
+/// Ties a found game to a Steam game, or to none.
+#[tauri::command]
+pub async fn match_found(
+    app: State<'_, Arc<App>>,
+    product_id: String,
+    appid: Option<u32>,
+) -> CmdResult<Installed> {
+    blocking(&app, move |app| app.match_found(&product_id, appid)).await
 }
 
 #[tauri::command]

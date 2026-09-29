@@ -14,18 +14,19 @@ use serde::Serialize;
 
 use crate::db::downloads::{self as download_db, NewDownload};
 use crate::db::write::{get_meta, set_meta};
-use crate::db::{Db, links, read, stores as store_db};
+use crate::db::{Db, found as found_db, links, read, stores as store_db};
 use crate::downloads::{DownloadManager, names, sources, torrent};
 use crate::http::{self, Counters, Pacer};
+use crate::install::found::{self, Launchers};
 use crate::install::{self, InstallManager};
 use crate::links::{SiteRegistry, find, resolve, validate};
 use crate::model::{
     Account, Accounts, ApiKeyStatus, AppStatus, Download, DownloadList, DownloadSourceKind,
-    FileOption, FoundLink, GameDetail, GameLink, GameMedia, GamePage, GamePrices, GameQuery,
-    GameRequirements, GameReviews, Installed, LibraryItem, LibraryReport, LinkCheck, LinkInput,
-    MatchState, NewReleasesReport, OpenTarget, Outcome, Platform, RequirementList, SearchSite,
-    Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, StoresReport,
-    SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
+    FileOption, FoundLink, FoundSource, GameDetail, GameLink, GameMedia, GamePage, GamePrices,
+    GameQuery, GameRequirements, GameReviews, Installed, LibraryItem, LibraryReport, LinkCheck,
+    LinkInput, MatchState, NewReleasesReport, OpenTarget, Outcome, Platform, RequirementList,
+    ScanReport, SearchSite, Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit,
+    StoresReport, SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
 };
 use crate::new_releases::{NewReleasesOptions, fetch_new_releases};
 use crate::secrets::{ItadKey, ItchKey, SecretStore};
@@ -57,6 +58,8 @@ pub struct JobOptions {
     /// How torrent transfers find peers (the app uses the swarm).
     pub torrent: torrent::Options,
     pub source: Arc<SourceFactory>,
+    /// Steam and Epic libraries to scan instead of this computer's (tests).
+    pub launchers: Option<Launchers>,
 }
 
 impl Default for JobOptions {
@@ -67,6 +70,7 @@ impl Default for JobOptions {
             stores: StoreSyncOptions::default(),
             torrent: torrent::Options::default(),
             source: Arc::new(steam_source),
+            launchers: None,
         }
     }
 }
@@ -74,10 +78,15 @@ impl Default for JobOptions {
 /// A Steam game is looked up in GamesDB again after this long.
 const LOOKUP_MAX_AGE: i64 = 30 * 86_400;
 
+/// Game folders the user can add to scans.
+const MAX_SCAN_DIRS: usize = 20;
+
 mod settings_keys {
     pub const LIBRARY_DIR: &str = "settings.library_dir";
     pub const KEEP_INSTALLERS: &str = "settings.keep_installers";
     pub const AUTO_UPDATE: &str = "settings.auto_update";
+    /// JSON array of folders.
+    pub const SCAN_DIRS: &str = "settings.scan_dirs";
 }
 
 fn steam_source() -> Result<Box<dyn CatalogSource>> {
@@ -127,6 +136,8 @@ pub struct App {
     downloads: DownloadManager,
     /// Installs finished downloads, on a thread of its own (also started by `start_downloads`).
     installs: InstallManager,
+    /// One scan for installed games at a time.
+    scanning: Mutex<()>,
     sink: Arc<dyn EventSink>,
     options: JobOptions,
 }
@@ -177,6 +188,7 @@ impl App {
             jobs,
             downloads,
             installs,
+            scanning: Mutex::new(()),
             sink,
             options,
         })
@@ -627,6 +639,13 @@ impl App {
             if let Some(v) = patch.auto_update {
                 set_meta(conn, settings_keys::AUTO_UPDATE, u8::from(v))?;
             }
+            if let Some(dirs) = &patch.scan_dirs {
+                set_meta(
+                    conn,
+                    settings_keys::SCAN_DIRS,
+                    serde_json::to_string(&scan_dirs(dirs)?)?,
+                )?;
+            }
         }
         self.settings()
     }
@@ -803,7 +822,9 @@ impl App {
         self.installs.live().is_some()
     }
 
-    pub fn launch_game(&self, store: Store, product_id: &str) -> Result<()> {
+    /// Starts a game. One that starts through its launcher (Steam, Epic Games) gives the
+    /// address that asks the launcher to, for the caller to open.
+    pub fn launch_game(&self, store: Store, product_id: &str) -> Result<Option<String>> {
         install::launch(lock(&self.reader).conn(), store, product_id)
     }
 
@@ -825,14 +846,95 @@ impl App {
     }
 
     /// Uninstalls a game (see [`install::remove`]). An uninstaller may ask for administrator
-    /// rights and take a while; no connection is held meanwhile.
-    pub fn uninstall_game(&self, store: Store, product_id: &str) -> Result<()> {
+    /// rights and take a while; no connection is held meanwhile. A game Steam installed is left
+    /// to Steam: the address of its uninstall dialog comes back for the caller to open. Other
+    /// games found on this computer are never deleted; they can be hidden.
+    pub fn uninstall_game(&self, store: Store, product_id: &str) -> Result<Option<String>> {
+        if store == Store::Local {
+            let row =
+                found_db::get(lock(&self.reader).conn(), product_id)?.ok_or(Error::NotFound)?;
+            return match (row.source, row.appid) {
+                (FoundSource::Steam, Some(appid)) => Ok(Some(format!("steam://uninstall/{appid}"))),
+                _ => Err(Error::Invalid("found_uninstall")),
+            };
+        }
         let removal = install::removal(lock(&self.reader).conn(), store, product_id)?;
         let library = PathBuf::from(self.settings()?.library_dir);
         install::remove(&removal, &library)?;
         install::forget(lock(&self.writer).conn(), store, product_id)?;
         self.install_changed(store, product_id);
+        Ok(None)
+    }
+
+    /// Looks for games installed outside GameLib: in Steam's and Epic's libraries, the library
+    /// folder and the folders in the settings. Reads the disk and the catalog without holding
+    /// the UI's connection; only storing the result does.
+    pub fn scan_installed(&self) -> Result<ScanReport> {
+        let _one = lock(&self.scanning);
+        let (settings, known) = {
+            let reader = lock(&self.reader);
+            (
+                read_settings(reader.conn())?,
+                install::known_dirs(reader.conn())?,
+            )
+        };
+        let launchers = self
+            .options
+            .launchers
+            .clone()
+            .unwrap_or_else(Launchers::detect);
+        let scanned = install::scan::scan(&found::plan(&launchers, &settings, known));
+        let games = found::identify(Db::open_reader(&self.db_path)?.conn(), scanned.games)?;
+        let report = found::sync(
+            lock(&self.writer).conn_mut(),
+            games,
+            &scanned.unreachable,
+            unix_now(),
+        )?;
+        self.sink.emit(
+            install::EVENT_CHANGED,
+            serde_json::json!({ "store": Store::Local, "productId": null }),
+        );
+        Ok(report)
+    }
+
+    /// Takes a found game off the list, or puts it back.
+    pub fn set_found_hidden(&self, product_id: &str, hidden: bool) -> Result<()> {
+        if !found_db::set_hidden(lock(&self.writer).conn(), product_id, hidden)? {
+            return Err(Error::NotFound);
+        }
+        self.install_changed(Store::Local, product_id);
         Ok(())
+    }
+
+    /// The found games the user took off the list.
+    pub fn hidden_found(&self) -> Result<Vec<Installed>> {
+        found::hidden(lock(&self.reader).conn())
+    }
+
+    /// Ties a found game to a Steam game (or, with `None`, to none); scans keep the choice.
+    pub fn match_found(&self, product_id: &str, appid: Option<u32>) -> Result<Installed> {
+        let writer = lock(&self.writer);
+        let conn = writer.conn();
+        if let Some(appid) = appid
+            && !found_db::in_catalog(conn, appid)?
+        {
+            return Err(Error::NotFound);
+        }
+        if !found_db::set_match(conn, product_id, appid)? {
+            return Err(Error::NotFound);
+        }
+        let mut game = install::list(conn)?
+            .into_iter()
+            .chain(found::hidden(conn)?)
+            .find(|i| i.store == Store::Local && i.product_id == product_id)
+            .ok_or(Error::NotFound)?;
+        if let Some(appid) = game.appid {
+            game.steam_header = store_db::steam_header(conn, appid)?;
+        }
+        drop(writer);
+        self.install_changed(Store::Local, product_id);
+        Ok(game)
     }
 
     fn install_changed(&self, store: Store, product_id: &str) {
@@ -1084,7 +1186,31 @@ pub(crate) fn read_settings(conn: &rusqlite::Connection) -> Result<Settings> {
             .unwrap_or_else(default_library_dir),
         keep_installers: flag(settings_keys::KEEP_INSTALLERS, false)?,
         auto_update: flag(settings_keys::AUTO_UPDATE, true)?,
+        scan_dirs: get_meta(conn, settings_keys::SCAN_DIRS)?
+            .and_then(|v| serde_json::from_str(&v).ok())
+            .unwrap_or_default(),
     })
+}
+
+/// Game folders to scan, as the user gave them: absolute, each once, at most a few.
+fn scan_dirs(dirs: &[String]) -> Result<Vec<String>> {
+    let mut out: Vec<String> = Vec::new();
+    for dir in dirs.iter().map(|d| d.trim()).filter(|d| !d.is_empty()) {
+        if !Path::new(dir).is_absolute() {
+            return Err(Error::Invalid("scan_dir"));
+        }
+        let key = install::scan::path_key(Path::new(dir));
+        if !out
+            .iter()
+            .any(|d| install::scan::path_key(Path::new(d)) == key)
+        {
+            out.push(dir.to_owned());
+        }
+    }
+    if out.len() > MAX_SCAN_DIRS {
+        return Err(Error::Invalid("scan_dirs"));
+    }
+    Ok(out)
 }
 
 /// `~/Games` (e.g. `C:\\Users\\<user>\\Games`).
@@ -1101,8 +1227,8 @@ pub fn account_page(store: Store) -> &'static str {
     match store {
         Store::Gog => "https://www.gog.com/account",
         Store::Itch => "https://itch.io/user/settings/api-keys",
-        // Web downloads have no account to manage.
-        Store::Web => "",
+        // Web downloads and found games have no account to manage.
+        Store::Web | Store::Local => "",
     }
 }
 
@@ -1111,8 +1237,8 @@ fn store_domains(store: Store) -> &'static [&'static str] {
     match store {
         Store::Gog => &["gog.com"],
         Store::Itch => &["itch.io"],
-        // Web downloads have no product pages.
-        Store::Web => &[],
+        // Web downloads and found games have no product pages.
+        Store::Web | Store::Local => &[],
     }
 }
 

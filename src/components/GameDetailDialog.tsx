@@ -489,13 +489,13 @@ function DetailSkeleton() {
 function PlayInstalled({ appid }: { appid: number }) {
   const installs = useInstalls();
   const act = useInstallActions();
-  const game = installs.data?.find((i) => i.appid === appid && i.exe);
+  const game = installs.data?.find((i) => i.appid === appid && (i.exe || i.launchUrl));
   if (!game) return null;
   return (
     <button
       type="button"
       onClick={() => void act.play(game)}
-      title={`${tr.install.play} · ${tr.storeNames[game.store]}`}
+      title={`${tr.install.play} · ${game.source ? tr.found.sources[game.source] : tr.storeNames[game.store]}`}
       className="inline-flex h-10 items-center gap-2 rounded-lg bg-success px-4 text-sm font-semibold text-ink-950 shadow-lg shadow-success/20 transition hover:brightness-110"
     >
       <Play size={16} fill="currentColor" />

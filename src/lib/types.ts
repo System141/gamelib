@@ -478,7 +478,8 @@ export interface FoundLink {
 // --- other stores ---------------------------------------------------------------------------
 
 /** Every store GameLib knows: the two with accounts, and `web` for captured downloads. */
-export type Store = "gog" | "itch" | "web";
+/** "local": a game found on this computer (Steam's or Epic's library, a game folder). */
+export type Store = "gog" | "itch" | "web" | "local";
 export type MatchMethod = "gamesdb" | "title" | "manual";
 export type MatchState = "auto" | "confirmed" | "rejected";
 
@@ -557,6 +558,8 @@ export interface Settings {
   libraryDir: string;
   keepInstallers: boolean;
   autoUpdate: boolean;
+  /** Folders whose game folders count as installed games, besides the library folder. */
+  scanDirs: string[];
 }
 
 export type SettingsPatch = Partial<Settings>;
@@ -639,7 +642,19 @@ export interface DownloadRemoved {
 // --- installs ---------------------------------------------------------------------------------
 
 export type InstallState = "waiting" | "installing" | "installed" | "failed" | "confirm" | "approved" | "manual";
-export type InstallMethod = "gog" | "archive" | "portable" | "installer" | "galaxy";
+export type InstallMethod = "gog" | "archive" | "portable" | "installer" | "galaxy" | "found";
+
+/** Where a game installed outside GameLib was found. */
+export type FoundSource = "steam" | "epic" | "folder";
+
+/** How a found game was tied to its Steam game. */
+export type FoundMatch = "steam" | "gog" | "itch" | "steam_appid" | "title" | "manual";
+
+export interface ScanReport {
+  found: number;
+  added: number;
+  removed: number;
+}
 
 export interface Installed {
   store: Store;
@@ -657,10 +672,15 @@ export interface Installed {
   candidates: string[];
   optionLabel: string | null;
   installedAt: number;
-  /** Installed outside GameLib (GOG Galaxy). */
+  /** Installed outside GameLib (GOG Galaxy, a launcher, a game folder). */
   external: boolean;
   /** The matched Steam game's header image. */
   steamHeader: string | null;
+  /** Where a found game was found. */
+  source: FoundSource | null;
+  /** A found game that starts through its launcher (Steam, Epic Games). */
+  launchUrl: string | null;
+  matchedBy: FoundMatch | null;
 }
 
 /** `install:progress` payload. */

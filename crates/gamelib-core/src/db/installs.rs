@@ -109,6 +109,9 @@ fn row(r: &Row<'_>) -> rusqlite::Result<InstallRow> {
             installed_at: r.get(11)?,
             external: false,
             steam_header: None,
+            source: None,
+            launch_url: None,
+            matched_by: None,
         },
         uninstaller: r.get(12)?,
     })

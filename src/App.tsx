@@ -12,7 +12,7 @@ import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { ViewHeader } from "./components/ViewHeader";
-import { useSettings, useStatus, useTags } from "./hooks/useData";
+import { useAutoScan, useSettings, useStatus, useTags } from "./hooks/useData";
 import { useAutoUpdateCheck } from "./hooks/useUpdater";
 import { useFilters } from "./hooks/useFilters";
 import { useDownloadEvents } from "./hooks/useDownloadEvents";
@@ -54,6 +54,8 @@ export function App() {
 
   const empty = status.data?.gameCount === 0;
   const storesSynced = (status.data?.storeCounts.gogProducts ?? 0) > 0;
+  // Games installed outside GameLib are found once the catalog can tell which games they are.
+  useAutoScan((status.data?.gameCount ?? 0) > 0);
 
   return (
     <div className="app-backdrop flex h-full">

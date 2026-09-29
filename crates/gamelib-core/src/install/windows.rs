@@ -153,6 +153,22 @@ pub fn gog_registered_games() -> Vec<RegisteredGame> {
     .collect()
 }
 
+/// Where Steam is installed, from its registry entries.
+pub fn steam_path() -> Option<PathBuf> {
+    let user = windows_registry::CURRENT_USER
+        .open(r"Software\Valve\Steam")
+        .and_then(|k| k.get_string("SteamPath"));
+    let machine = || {
+        windows_registry::LOCAL_MACHINE
+            .open(r"SOFTWARE\WOW6432Node\Valve\Steam")
+            .and_then(|k| k.get_string("InstallPath"))
+    };
+    user.or_else(|_| machine())
+        .ok()
+        .map(|p| PathBuf::from(p.trim()))
+        .filter(|p| p.is_dir())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,5 +208,6 @@ mod tests {
     fn reads_the_registry_without_failing() {
         // Usually empty on a build machine; must never panic.
         let _ = gog_registered_games();
+        let _ = steam_path();
     }
 }

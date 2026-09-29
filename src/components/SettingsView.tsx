@@ -6,7 +6,10 @@ import {
   BadgePercent,
   CircleCheck,
   ExternalLink,
+  EyeOff,
   FolderOpen,
+  FolderPlus,
+  FolderSearch,
   KeyRound,
   LoaderCircle,
   LogIn,
@@ -14,18 +17,29 @@ import {
   RefreshCw,
   ShieldCheck,
   Trash2,
+  Undo2,
+  X,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
 import { formatRelative } from "../lib/format";
 import { showToast } from "../lib/toast";
 import type { Accounts, AppStatus, CmdError, Store } from "../lib/types";
-import { useAccounts, useAccountsUpdate, useSettings, useSettingsUpdate } from "../hooks/useData";
+import {
+  useAccounts,
+  useAccountsUpdate,
+  useHiddenFound,
+  useScanInstalled,
+  useScanningInstalled,
+  useSettings,
+  useSettingsUpdate,
+} from "../hooks/useData";
 import { useCheckUpdate, useInstallUpdate, useUpdateStatus } from "../hooks/useUpdater";
-import { StoreMark } from "./badges";
+import { FoundMark, StoreMark } from "./badges";
 import { ItadKeyForm } from "./PricesSection";
-import { SmallButton } from "./ui";
+import { IconButton, SmallButton } from "./ui";
 
 export function SettingsView({ status }: { status: AppStatus | undefined }) {
   return (
@@ -42,6 +56,11 @@ export function SettingsView({ status }: { status: AppStatus | undefined }) {
 
         <Section title={tr.settings.libraryTitle} icon={<FolderOpen size={17} className="text-accent" />}>
           <LibraryFolder />
+        </Section>
+
+        <Section title={tr.found.foldersTitle} icon={<FolderSearch size={17} className="text-accent" />}>
+          <ScanFolders />
+          <HiddenGames />
         </Section>
 
         <Section title={tr.update.title} icon={<ArrowUpCircle size={17} className="text-accent" />}>
@@ -390,6 +409,147 @@ function LibraryFolder() {
           <span className="block text-xs text-ink-400">{tr.settings.keepInstallersHint}</span>
         </span>
       </label>
+    </div>
+  );
+}
+
+/** Folders whose game folders count as installed games; the library folder always does. */
+function ScanFolders() {
+  const settings = useSettings();
+  const update = useSettingsUpdate();
+  const scan = useScanInstalled();
+  const scanning = useScanningInstalled();
+  const [typing, setTyping] = useState<string | null>(null);
+  const dirs = settings.data?.scanDirs ?? [];
+
+  const fail = (e: unknown) => showToast({ tone: "error", title: errorText(toCmdError(e)) });
+  const saved = (s: typeof settings.data) => {
+    if (!s) return;
+    update(s);
+    scan.mutate();
+  };
+  /** Resolves to whether the folders were saved. */
+  const save = (next: string[]) =>
+    api
+      .updateSettings({ scanDirs: next })
+      .then((s) => (saved(s), true))
+      .catch((e) => (fail(e), false));
+  const add = () =>
+    api
+      .pickScanDir()
+      .then((s) => s && saved(s))
+      .catch((e) => {
+        const err = toCmdError(e);
+        // The browser preview has no folder dialog: type the path instead.
+        if (err.kind === "invalid" && err.message === "desktop_only") setTyping("");
+        else fail(err);
+      });
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (typing == null || !typing.trim()) return;
+    // A refused path stays in the field to be fixed.
+    void save([...dirs, typing.trim()]).then((ok) => ok && setTyping(null));
+  };
+
+  return (
+    <div className="rounded-xl bg-ink-800/70 p-4 ring-1 ring-white/6">
+      <p className="text-[13px] leading-relaxed text-ink-300">{tr.found.foldersHint}</p>
+      <ul className="mt-3 space-y-1.5" aria-label={tr.found.foldersTitle}>
+        <li className="flex items-center gap-2 rounded-lg bg-ink-900 px-3 py-2 ring-1 ring-white/8">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-mono text-[12.5px] text-ink-100" title={settings.data?.libraryDir}>
+              {settings.data?.libraryDir ?? "—"}
+            </span>
+            <span className="block text-[11.5px] text-ink-500">{tr.found.libraryAlways}</span>
+          </span>
+        </li>
+        {dirs.map((dir) => (
+          <li key={dir} className="flex items-center gap-2 rounded-lg bg-ink-900 px-3 py-2 ring-1 ring-white/8">
+            <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink-100" title={dir}>
+              {dir}
+            </span>
+            <IconButton label={tr.found.removeFolder} icon={<X size={13} />} onClick={() => void save(dirs.filter((d) => d !== dir))} />
+          </li>
+        ))}
+      </ul>
+      {typing != null && (
+        <form onSubmit={submit} className="mt-2 flex items-center gap-2">
+          <input
+            value={typing}
+            onChange={(e) => setTyping(e.target.value)}
+            placeholder={tr.found.folderPlaceholder}
+            spellCheck={false}
+            autoFocus
+            className="h-9 min-w-0 flex-1 rounded-lg bg-ink-900 px-3 font-mono text-[12.5px] text-ink-100 ring-1 ring-white/10 outline-none placeholder:text-ink-500 focus:ring-accent/50"
+            aria-label={tr.found.addFolder}
+          />
+          <button
+            type="submit"
+            disabled={!typing.trim()}
+            className="inline-flex h-9 items-center rounded-lg bg-accent/15 px-3 text-sm font-medium text-accent-soft ring-1 ring-accent/35 hover:bg-accent/25 disabled:opacity-50"
+          >
+            {tr.found.add}
+          </button>
+        </form>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <SmallButton onClick={() => void add()} icon={<FolderPlus size={13} />}>
+          {tr.found.addFolder}
+        </SmallButton>
+        <SmallButton
+          onClick={() =>
+            scan.mutate(undefined, {
+              onSuccess: (r) => showToast({ tone: r.added > 0 ? "success" : "info", title: tr.found.toastScanned(r.found, r.added) }),
+              onError: fail,
+            })
+          }
+          disabled={scanning}
+          icon={scanning ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+        >
+          {scanning ? tr.found.scanning : tr.found.rescan}
+        </SmallButton>
+      </div>
+    </div>
+  );
+}
+
+/** Found games the user took off the installed list, to bring back. */
+function HiddenGames() {
+  const hidden = useHiddenFound();
+  const qc = useQueryClient();
+  const games = hidden.data ?? [];
+  if (games.length === 0) return null;
+  const unhide = (productId: string, title: string) =>
+    api
+      .setFoundHidden(productId, false)
+      .then(() => {
+        void qc.invalidateQueries({ queryKey: ["hidden-found"] });
+        void qc.invalidateQueries({ queryKey: ["installs"] });
+        showToast({ tone: "success", title: tr.found.toastUnhidden(title) });
+      })
+      .catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
+  return (
+    <div className="rounded-xl bg-ink-800/70 p-4 ring-1 ring-white/6">
+      <div className="flex items-center gap-2 text-sm font-medium text-ink-100">
+        <EyeOff size={15} className="text-ink-400" />
+        {tr.found.hiddenTitle(games.length)}
+      </div>
+      <ul className="mt-2 divide-y divide-white/6">
+        {games.map((g) => (
+          <li key={g.productId} className="flex items-center gap-3 py-2">
+            {g.source && <FoundMark source={g.source} size={20} />}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] text-ink-100">{g.title}</span>
+              <span className="block truncate font-mono text-[11.5px] text-ink-500" title={g.dir ?? undefined}>
+                {g.dir}
+              </span>
+            </span>
+            <SmallButton onClick={() => void unhide(g.productId, g.title)} icon={<Undo2 size={13} />}>
+              {tr.found.unhide}
+            </SmallButton>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
