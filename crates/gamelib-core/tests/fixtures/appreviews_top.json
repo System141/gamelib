@@ -1,0 +1,153 @@
+{
+  "success": 1,
+  "query_summary": {
+    "num_reviews": 20,
+    "review_score": 9,
+    "review_score_desc": "Overwhelmingly Positive",
+    "total_positive": 47911,
+    "total_negative": 1866,
+    "total_reviews": 49777
+  },
+  "reviews": [
+    {
+      "recommendationid": "233727365",
+      "author": {
+        "steamid": "76561198033830356",
+        "personaname": "TheQuuzeN",
+        "persona_status": "online",
+        "profile_url": "https://steamcommunity.com/profiles/76561198033830356/",
+        "num_games_owned": 0,
+        "num_reviews": 11,
+        "playtime_forever": 1027,
+        "playtime_last_two_weeks": 0,
+        "playtime_at_review": 1027,
+        "last_played": 1749215414,
+        "avatar": "aa68b1f7c7a717d5ecddbf680bf1551202cc8654"
+      },
+      "language": "turkish",
+      "review": "Kaç sene önce aldığımız oyuna NEXT-GEN güncellemesi getirdiniz ücretsiz olarak verdiniz. Şimdi de Remastered sürümü çıkarıyorsunuz bunu da ücretsiz veriyorsunuz. Her versiyona ayrı para isteyen oyun firmaları utanırlar belki sizi görünce.",
+      "timestamp_created": 1787732130,
+      "timestamp_updated": 1787732130,
+      "voted_up": true,
+      "votes_up": 380,
+      "votes_funny": 0,
+      "weighted_vote_score": "0.968071222305297852",
+      "comment_count": 4,
+      "steam_purchase": true,
+      "received_for_free": false,
+      "refunded": false,
+      "written_during_early_access": false,
+      "primarily_steam_deck": false,
+      "app_release_date": "1431937260",
+      "reactions": [
+        {
+          "reaction_type": 29,
+          "count": 5
+        },
+        {
+          "reaction_type": 24,
+          "count": 4
+        },
+        {
+          "reaction_type": 32,
+          "count": 2
+        },
+        {
+          "reaction_type": 31,
+          "count": 1
+        },
+        {
+          "reaction_type": 33,
+          "count": 1
+        },
+        {
+          "reaction_type": 34,
+          "count": 1
+        },
+        {
+          "reaction_type": 35,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "recommendationid": "234172259",
+      "author": {
+        "steamid": "76561198744941860",
+        "personaname": "Prometrush",
+        "persona_status": "offline",
+        "profile_url": "https://steamcommunity.com/profiles/76561198744941860/",
+        "num_games_owned": 0,
+        "num_reviews": 9,
+        "playtime_forever": 17023,
+        "playtime_last_two_weeks": 0,
+        "playtime_at_review": 17023,
+        "last_played": 1762386132,
+        "avatar": "c0835bb3eaeb96e2ff93d340ac905b3add2411fe"
+      },
+      "language": "turkish",
+      "review": "Sevmeyelimde taşa mı dönelim kardeşim...\nOyunlarında Türkçe dil desteğini eksik etmez. 10 yıllık oyunuyla bile ilgilenir remaster yapıp dlc çıkarır ve tüm bunları  BEDAVAYA yapar. \nBen onu bunu bilmem hocam bunla geldim bunla giderim.",
+      "timestamp_created": 1788193060,
+      "timestamp_updated": 1788193060,
+      "voted_up": true,
+      "votes_up": 175,
+      "votes_funny": 2,
+      "weighted_vote_score": "0.920546412467956543",
+      "comment_count": 0,
+      "steam_purchase": true,
+      "received_for_free": false,
+      "refunded": false,
+      "written_during_early_access": false,
+      "primarily_steam_deck": false,
+      "app_release_date": "1431937260",
+      "reactions": [
+        {
+          "reaction_type": 29,
+          "count": 1
+        },
+        {
+          "reaction_type": 31,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "recommendationid": "211628459",
+      "author": {
+        "steamid": "76561198175859718",
+        "personaname": "b0naDea",
+        "persona_status": "offline",
+        "profile_url": "https://steamcommunity.com/id/ayzabahceci/",
+        "num_games_owned": 19,
+        "num_reviews": 1,
+        "playtime_forever": 583,
+        "playtime_last_two_weeks": 52,
+        "playtime_at_review": 149,
+        "last_played": 1790126946,
+        "avatar": "d1c9731775345391b36a870cb127988f2d738842"
+      },
+      "language": "turkish",
+      "review": "birinden yardım istiyorsun şunu yaparsan yardım ederim diyor dediği yere gidiyorsun bu sefer o da şunu yaparsan yardım ederim diyor öyle bir zincir ki ana görevi unuttum",
+      "timestamp_created": 1764417163,
+      "timestamp_updated": 1764417163,
+      "voted_up": true,
+      "votes_up": 65,
+      "votes_funny": 32,
+      "weighted_vote_score": "0.852512538433074951",
+      "comment_count": 5,
+      "steam_purchase": true,
+      "received_for_free": false,
+      "refunded": false,
+      "written_during_early_access": false,
+      "primarily_steam_deck": false,
+      "app_release_date": "1431937260",
+      "reactions": [
+        {
+          "reaction_type": 24,
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "cursor": "AoIFQFW17YAAAAB6r+SnBg=="
+}

@@ -46,6 +46,7 @@ pub fn run() {
             commands::get_game,
             commands::list_tags,
             commands::get_game_media,
+            commands::get_game_reviews,
             commands::start_store_sync,
             commands::get_store_matches,
             commands::refresh_store_matches,
@@ -96,6 +97,7 @@ pub fn run() {
             commands::open_link,
             commands::open_in_steam,
             commands::open_browser,
+            commands::open_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running GameLib");

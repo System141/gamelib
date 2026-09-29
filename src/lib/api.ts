@@ -16,6 +16,7 @@ import type {
   GameDetail,
   GameLink,
   GameMedia,
+  GameReviews,
   GamePage,
   GameQuery,
   LibraryItem,
@@ -33,6 +34,7 @@ import type {
   TagInfo,
   UpdateProgress,
   UpdateStatus,
+  SearchSite,
 } from "./types";
 
 /** Typed wrappers around the Rust commands (src-tauri/src/commands.rs; `gamelib-cli serve` in the browser preview). */
@@ -52,6 +54,7 @@ export const api = {
   getGame: (appid: number) => invoke<GameDetail | null>("get_game", { appid }),
   listTags: () => invoke<TagInfo[]>("list_tags"),
   getGameMedia: (appid: number) => invoke<GameMedia>("get_game_media", { appid }),
+  getGameReviews: (appid: number) => invoke<GameReviews>("get_game_reviews", { appid }),
   startStoreSync: () => invoke<void>("start_store_sync"),
   getStoreMatches: (appid: number) => invoke<StoreMatch[]>("get_store_matches", { appid }),
   refreshStoreMatches: (appid: number) => invoke<StoreMatch[]>("refresh_store_matches", { appid }),
@@ -108,6 +111,8 @@ export const api = {
   /** Desktop only: the in-app browser; anything downloaded there is queued for this game. */
   openBrowser: (appid: number, title: string, url: string) => invoke<void>("open_browser", { appid, title, url }),
   openInSteam: (appid: number, target: "web" | "client" | "install") => invoke<void>("open_in_steam", { appid, target }),
+  /** A web search in the default browser (gameplay videos, hardware comparisons). */
+  openSearch: (site: SearchSite, query: string) => invoke<void>("open_search", { site, query }),
 };
 
 export const EVENT_PROGRESS = "sync:progress";

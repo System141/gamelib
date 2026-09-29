@@ -16,6 +16,7 @@ import type {
 } from "../lib/types";
 
 const n = formatNumber;
+const decimal = (value: number) => value.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
 
 export const tr = {
   app: {
@@ -346,6 +347,44 @@ export const tr = {
     viewerNext: "Sonraki görsel",
     viewerCounter: (i: number, total: number) => `${i} / ${total}`,
     loadError: "Oyun bilgileri yüklenemedi.",
+  },
+  media: {
+    title: "Fragmanlar ve ekran görüntüleri",
+    trailer: "Fragman",
+    play: (name: string) => `Oynat: ${name}`,
+    gameplay: "YouTube'da oynanış videoları",
+    playerError: "Fragman oynatılamadı.",
+    watchOnSteam: "Steam'de izle",
+  },
+  reviews: {
+    title: "İncelemeler",
+    all: "Tüm diller",
+    turkish: "Türkçe incelemeler",
+    noTurkish: "Türkçe inceleme yok",
+    recent: "Son incelemeler",
+    recentDetail: (count: number, span: string) => `Son ${n(count)} inceleme, ${span} içinde yazılmış`,
+    positiveShare: (percent: number) => `%${Math.round(percent)} olumlu`,
+    count: (count: number) => `${n(count)} inceleme`,
+    recommended: "Öneriyor",
+    notRecommended: "Önermiyor",
+    hours: (atReview: number, total: number) =>
+      atReview === total ? `${decimal(total)} saat oynamış` : `İncelemede ${decimal(atReview)} saat, toplam ${decimal(total)} saat oynamış`,
+    helpful: (count: number) => `${n(count)} kişi faydalı buldu`,
+    english: "İngilizce",
+    earlyAccess: "Erken erişimde yazılmış",
+    free: "Oyunu ücretsiz edinmiş",
+    more: "Devamını oku",
+    less: "Daha az göster",
+    none: "Son bir yılda faydalı bulunan inceleme yok.",
+    loadError: "İncelemeler yüklenemedi.",
+    retry: "Yeniden dene",
+    seeAll: "Steam'de tüm incelemeler",
+    span: (seconds: number) =>
+      seconds < 3_600
+        ? `${Math.max(1, Math.round(seconds / 60))} dakika`
+        : seconds < 48 * 3_600
+          ? `${Math.round(seconds / 3_600)} saat`
+          : `${Math.round(seconds / 86_400)} gün`,
   },
   links: {
     title: "Steam dışı bağlantılar",

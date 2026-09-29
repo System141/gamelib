@@ -15,8 +15,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use gamelib_core::app::account_page;
-use gamelib_core::app::{App, EventSink, release_page, steam_url};
-use gamelib_core::model::{GameQuery, LinkInput, MatchState, OpenTarget, SettingsPatch, Store};
+use gamelib_core::app::{App, EventSink, release_page, search_url, steam_url};
+use gamelib_core::model::{
+    GameQuery, LinkInput, MatchState, OpenTarget, SearchSite, SettingsPatch, Store,
+};
 use gamelib_core::{Error, ErrorInfo, ErrorKind, Result};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -160,6 +162,12 @@ struct SteamArgs {
 }
 
 #[derive(Deserialize)]
+struct SearchArgs {
+    site: SearchSite,
+    query: String,
+}
+
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MatchStateArgs {
     store: Store,
@@ -251,6 +259,7 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         "get_game" => to_json(&app.get_game(parse::<AppidArgs>(args)?.appid)?),
         "list_tags" => to_json(&app.list_tags()?),
         "get_game_media" => to_json(&app.game_media(parse::<AppidArgs>(args)?.appid)?),
+        "get_game_reviews" => to_json(&app.game_reviews(parse::<AppidArgs>(args)?.appid)?),
         "start_store_sync" => {
             app.start_store_sync()?;
             Value::Null
@@ -339,6 +348,10 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         "open_in_steam" => {
             let a: SteamArgs = parse(args)?;
             json!({ "url": steam_url(a.appid, a.target) })
+        }
+        "open_search" => {
+            let a: SearchArgs = parse(args)?;
+            json!({ "url": search_url(a.site, &a.query)? })
         }
         _ => return Err(ErrorInfo::from(Error::NotFound)),
     };
@@ -647,6 +660,17 @@ mod tests {
         );
         assert_eq!(status, 200);
         assert_eq!(body["url"], "steam://store/620");
+
+        let (status, body) = t.post(
+            "open_search",
+            "application/json",
+            r#"{"site":"youtube","query":"Portal 2 gameplay"}"#,
+        );
+        assert_eq!(status, 200);
+        assert_eq!(
+            body["url"],
+            "https://www.youtube.com/results?search_query=Portal+2+gameplay"
+        );
 
         let (status, body) = t.post("open_link", "application/json", r#"{"id":99}"#);
         assert_eq!(status, 404);

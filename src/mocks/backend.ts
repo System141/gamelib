@@ -20,6 +20,7 @@ import type {
   GameDetail,
   GameLink,
   GameMedia,
+  GameReviews,
   GamePage,
   GameQuery,
   LibraryItem,
@@ -42,7 +43,8 @@ export interface Fixture {
   generatedAt: number;
   games: GameDetail[];
   tags: TagInfo[];
-  media: Record<string, GameMedia>;
+  /** Older fixtures have no trailers or review summaries. */
+  media: Record<string, Partial<GameMedia>>;
   /** Store matches of fixture games, by appid (exported after a store sync). */
   storeMatches?: Record<string, StoreMatch[]>;
 }
@@ -196,9 +198,14 @@ export class MockBackend {
         return this.present.has(args.appid) ? this.find(args.appid) : null;
       case "list_tags":
         return this.tags();
-      case "get_game_media":
+      case "get_game_media": {
         await sleep(350);
-        return this.fixture.media[String(args.appid)] ?? { descriptionTr: null, screenshots: [] };
+        const media = this.fixture.media[String(args.appid)];
+        return { descriptionTr: null, screenshots: [], trailers: [], reviews: null, ...media } satisfies GameMedia;
+      }
+      case "get_game_reviews":
+        await sleep(450);
+        return fakeReviews(args.appid);
       case "start_store_sync":
         return this.startWorker("stores");
       case "get_store_matches":
@@ -327,6 +334,7 @@ export class MockBackend {
       case "open_link":
       case "open_in_steam":
       case "open_browser":
+      case "open_search":
         console.info(`[mock] ${cmd}`, args);
         return null;
       default:
@@ -1312,4 +1320,51 @@ function synthesizeMatches(games: GameDetail[]): Record<string, StoreMatch[]> {
     ];
   });
   return out;
+}
+
+/** Sample reviews for the preview: two Turkish, one English, and a latest-100 summary. */
+function fakeReviews(appid: number): GameReviews {
+  const now = nowSeconds();
+  const positive = 55 + (appid % 45);
+  return {
+    top: [
+      {
+        id: `${appid}-1`,
+        language: "turkish",
+        positive: true,
+        text: "Hikâyesi ve karakterleri çok iyi yazılmış. İlk saatler biraz yavaş ama sonrasında bırakamıyorsun.\n\n• Grafikler güzel\n• Türkçe altyazı var",
+        helpful: 412,
+        hoursAtReview: 38.5,
+        hoursTotal: 120.2,
+        created: now - 40 * 86_400,
+        earlyAccess: false,
+        receivedForFree: false,
+      },
+      {
+        id: `${appid}-2`,
+        language: "turkish",
+        positive: false,
+        text: "Son güncellemeden sonra performans düştü; orta seviye bir bilgisayarda sık sık takılıyor. Düzeltilene kadar indirimi beklemenizi öneririm.",
+        helpful: 97,
+        hoursAtReview: 6.1,
+        hoursTotal: 6.4,
+        created: now - 9 * 86_400,
+        earlyAccess: false,
+        receivedForFree: false,
+      },
+      {
+        id: `${appid}-3`,
+        language: "english",
+        positive: true,
+        text: "Great combat and exploration. Runs well on a GTX 1060 at medium settings.",
+        helpful: 58,
+        hoursAtReview: 12,
+        hoursTotal: 30,
+        created: now - 120 * 86_400,
+        earlyAccess: true,
+        receivedForFree: true,
+      },
+    ],
+    recent: { count: 100, positive, from: now - 3 * 86_400, to: now - 600 },
+  };
 }

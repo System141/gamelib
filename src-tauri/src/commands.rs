@@ -3,11 +3,12 @@
 
 use std::sync::Arc;
 
-use gamelib_core::app::{App, steam_url};
+use gamelib_core::app::{App, search_url, steam_url};
 use gamelib_core::model::{
     Accounts, AppStatus, Download, DownloadList, FileOption, FoundLink, GameDetail, GameLink,
-    GameMedia, GamePage, GameQuery, Installed, LibraryItem, LinkCheck, LinkInput, MatchState,
-    OpenTarget, Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, TagInfo,
+    GameMedia, GamePage, GameQuery, GameReviews, Installed, LibraryItem, LinkCheck, LinkInput,
+    MatchState, OpenTarget, SearchSite, Settings, SettingsPatch, SiteInfo, Store, StoreMatch,
+    StoreSearchHit, TagInfo,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -73,6 +74,11 @@ pub async fn list_tags(app: State<'_, Arc<App>>) -> CmdResult<Vec<TagInfo>> {
 #[tauri::command]
 pub async fn get_game_media(app: State<'_, Arc<App>>, appid: u32) -> CmdResult<GameMedia> {
     blocking(&app, move |app| app.game_media(appid)).await
+}
+
+#[tauri::command]
+pub async fn get_game_reviews(app: State<'_, Arc<App>>, appid: u32) -> CmdResult<GameReviews> {
+    blocking(&app, move |app| app.game_reviews(appid)).await
 }
 
 // --- other stores ---------------------------------------------------------------------------
@@ -494,4 +500,10 @@ pub async fn open_browser(
     url: String,
 ) -> CmdResult<()> {
     crate::browser::open(&handle, Arc::clone(&app), appid, title, url).await
+}
+
+/// A web search (gameplay videos, hardware comparisons) in the default browser.
+#[tauri::command]
+pub fn open_search(handle: AppHandle, site: SearchSite, query: String) -> CmdResult<()> {
+    open_url(&handle, search_url(site, &query)?)
 }

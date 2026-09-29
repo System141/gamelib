@@ -139,6 +139,80 @@ pub struct GameMedia {
     /// Turkish short description, when the developer provided one.
     pub description_tr: Option<String>,
     pub screenshots: Vec<Screenshot>,
+    #[serde(default)]
+    pub trailers: Vec<Trailer>,
+    /// Steam's review summaries, when it sent them.
+    #[serde(default)]
+    pub reviews: Option<ReviewSummaries>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Trailer {
+    pub name: String,
+    /// 600×337 still.
+    pub poster: Option<String>,
+    /// HLS playlist.
+    pub stream: String,
+    pub mature: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewSummaries {
+    /// All languages, without reviews Steam marked as off-topic.
+    pub all: Option<ReviewScore>,
+    /// Turkish reviews only.
+    pub turkish: Option<ReviewScore>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewScore {
+    pub count: u32,
+    /// Share of positive reviews, 0–100.
+    pub percent: u8,
+    /// Steam's 0–9 summary score (9: "Son Derece Olumlu").
+    pub score: u8,
+}
+
+/// Reviews read from Steam when a game is opened.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameReviews {
+    /// The most helpful reviews of the past year: Turkish ones first, then English.
+    pub top: Vec<Review>,
+    /// How the latest reviews lean.
+    pub recent: Option<RecentReviews>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Review {
+    pub id: String,
+    /// Steam's language name ("turkish", "english").
+    pub language: String,
+    pub positive: bool,
+    /// Plain text: formatting tags and spoilers removed, long reviews shortened.
+    pub text: String,
+    pub helpful: u32,
+    /// Hours played when the review was written, and in total.
+    pub hours_at_review: f32,
+    pub hours_total: f32,
+    pub created: i64,
+    pub early_access: bool,
+    pub received_for_free: bool,
+}
+
+/// The latest reviews (up to 100) and the time they span.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentReviews {
+    pub count: u32,
+    pub positive: u32,
+    /// Oldest and newest of them (Unix seconds).
+    pub from: i64,
+    pub to: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -285,6 +359,14 @@ pub struct SyncFinished {
     pub stores: Option<StoresReport>,
     pub library: Option<LibraryReport>,
     pub error: Option<ErrorInfo>,
+}
+
+/// A site "search the web" buttons open (gameplay videos, hardware comparisons).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchSite {
+    Youtube,
+    Google,
 }
 
 /// Where `open_in_steam` opens a game.

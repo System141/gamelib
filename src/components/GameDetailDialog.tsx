@@ -1,18 +1,20 @@
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, Download, ExternalLink, ImageOff, Play, TriangleAlert, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clapperboard, Download, ExternalLink, ImageOff, Play, TriangleAlert, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
 import { formatDate, formatPercent, formatRelative, isRecent } from "../lib/format";
 import { showToast } from "../lib/toast";
-import type { GameDetail, Screenshot } from "../lib/types";
+import type { GameDetail, Screenshot, Trailer } from "../lib/types";
 import { useGame, useGameMedia, useInstalls } from "../hooks/useData";
 import { DeckBadge, PlatformIcons, PriceTag, ReviewBadge } from "./badges";
 import { GameArt } from "./GameArt";
 import { SteamIcon } from "./icons";
 import { LinksSection } from "./LinksSection";
 import { useInstallActions } from "./InstallActions";
+import { ReviewsSection } from "./ReviewsSection";
 import { StoresSection } from "./StoresSection";
+import { TrailerPlayer } from "./TrailerPlayer";
 
 /** Descriptors whose "mature" screenshots stay hidden unless adult content is enabled. */
 const SEXUAL_DESCRIPTORS = [1, 3, 4];
@@ -30,6 +32,7 @@ export function GameDetailDialog({ appid, onClose, tagName, onTagClick, showAdul
   const ref = useRef<HTMLDialogElement>(null);
   const game = useGame(appid);
   const [viewer, setViewer] = useState<number | null>(null);
+  const [trailer, setTrailer] = useState<number | null>(null);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -37,6 +40,7 @@ export function GameDetailDialog({ appid, onClose, tagName, onTagClick, showAdul
     if (appid != null && !dialog.open) dialog.showModal();
     if (appid == null && dialog.open) dialog.close();
     setViewer(null);
+    setTrailer(null);
     dialog.querySelector("[data-scroll]")?.scrollTo({ top: 0 });
   }, [appid]);
 
@@ -45,10 +49,11 @@ export function GameDetailDialog({ appid, onClose, tagName, onTagClick, showAdul
       ref={ref}
       onClose={onClose}
       onCancel={(e) => {
-        // Escape closes the image viewer first.
-        if (viewer != null) {
+        // Escape closes the image viewer or the trailer first.
+        if (viewer != null || trailer != null) {
           e.preventDefault();
           setViewer(null);
+          setTrailer(null);
         }
       }}
       onClick={(e) => e.target === ref.current && onClose()}
@@ -72,6 +77,8 @@ export function GameDetailDialog({ appid, onClose, tagName, onTagClick, showAdul
             showAdult={showAdult}
             viewer={viewer}
             setViewer={setViewer}
+            trailer={trailer}
+            setTrailer={setTrailer}
             onStoreSync={onStoreSync}
           />
         ) : game.isError ? (
@@ -91,6 +98,8 @@ function Detail({
   showAdult,
   viewer,
   setViewer,
+  trailer,
+  setTrailer,
   onStoreSync,
 }: {
   game: GameDetail;
@@ -99,11 +108,14 @@ function Detail({
   showAdult: boolean;
   viewer: number | null;
   setViewer: (i: number | null) => void;
+  trailer: number | null;
+  setTrailer: (i: number | null) => void;
   onStoreSync: () => void;
 }) {
   const media = useGameMedia(game.appid);
   const allowMature = showAdult || !game.descriptors.some((d) => SEXUAL_DESCRIPTORS.includes(d));
   const shots = (media.data?.screenshots ?? []).filter((s) => allowMature || !s.mature);
+  const trailers = (media.data?.trailers ?? []).filter((t) => allowMature || !t.mature);
   const description = media.data?.descriptionTr ?? game.shortDescription;
   const englishOnly = media.isSuccess && !media.data?.descriptionTr && !!game.shortDescription;
   const backdrop = game.hero ?? game.header ?? game.capsule;
@@ -211,9 +223,35 @@ function Detail({
           </section>
 
           <section>
-            <h3 className="mb-3 font-display text-lg font-semibold text-ink-50">{tr.detail.screenshots}</h3>
-            <Screenshots shots={shots} loading={media.isLoading} failed={media.isError} onOpen={setViewer} />
+            <div className="mb-3 flex items-center gap-2">
+              <h3 className="font-display text-lg font-semibold text-ink-50">
+                {trailers.length > 0 ? tr.media.title : tr.detail.screenshots}
+              </h3>
+              <button
+                type="button"
+                onClick={() =>
+                  void api
+                    .openSearch("youtube", `${game.name} gameplay`)
+                    .catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }))
+                }
+                className="ml-auto inline-flex items-center gap-1.5 text-[13px] text-ink-400 hover:text-white"
+              >
+                <Clapperboard size={14} />
+                {tr.media.gameplay}
+                <ExternalLink size={12} />
+              </button>
+            </div>
+            <MediaStrip
+              trailers={trailers}
+              shots={shots}
+              loading={media.isLoading}
+              failed={media.isError}
+              onOpen={setViewer}
+              onPlay={setTrailer}
+            />
           </section>
+
+          <ReviewsSection appid={game.appid} summaries={media.data?.reviews} onOpenSteam={() => void openSteam("web")} />
 
           <StoresSection appid={game.appid} onStoreSync={onStoreSync} />
 
@@ -271,6 +309,9 @@ function Detail({
       </div>
 
       {viewer != null && shots[viewer] && <Viewer shots={shots} index={viewer} onChange={setViewer} />}
+      {trailer != null && trailers[trailer] && (
+        <TrailerPlayer trailer={trailers[trailer]} onClose={() => setTrailer(null)} onOpenSteam={() => void openSteam("web")} />
+      )}
     </>
   );
 }
@@ -284,16 +325,20 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Screenshots({
+function MediaStrip({
+  trailers,
   shots,
   loading,
   failed,
   onOpen,
+  onPlay,
 }: {
+  trailers: Trailer[];
   shots: Screenshot[];
   loading: boolean;
   failed: boolean;
   onOpen: (i: number) => void;
+  onPlay: (i: number) => void;
 }) {
   if (loading) {
     return (
@@ -304,7 +349,7 @@ function Screenshots({
       </div>
     );
   }
-  if (failed || shots.length === 0) {
+  if (failed || shots.length + trailers.length === 0) {
     return (
       <div className="flex items-center gap-2 rounded-xl bg-white/3 px-4 py-6 text-sm text-ink-400 ring-1 ring-white/6">
         <ImageOff size={16} />
@@ -314,6 +359,33 @@ function Screenshots({
   }
   return (
     <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-3">
+      {trailers.map((t, i) => (
+        <button
+          key={t.stream}
+          type="button"
+          onClick={() => onPlay(i)}
+          aria-label={tr.media.play(t.name || tr.media.trailer)}
+          className="group relative aspect-video w-72 shrink-0 snap-start overflow-hidden rounded-xl bg-ink-800 ring-1 ring-white/8 transition hover:ring-accent/50"
+        >
+          {t.poster && (
+            <img
+              src={t.poster}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="size-full object-cover transition duration-500 group-hover:scale-105"
+            />
+          )}
+          <span className="absolute inset-0 grid place-items-center">
+            <span className="glass grid size-12 place-items-center rounded-full ring-1 ring-white/25 transition group-hover:scale-110 group-hover:ring-white/50">
+              <Play size={20} className="translate-x-px fill-white text-white" />
+            </span>
+          </span>
+          <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/85 to-transparent px-3 pt-6 pb-2 text-left text-xs text-ink-100">
+            {t.name || tr.media.trailer}
+          </span>
+        </button>
+      ))}
       {shots.map((s, i) => (
         <button
           key={s.thumb}

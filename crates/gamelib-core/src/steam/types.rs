@@ -66,6 +66,7 @@ pub struct StoreItem {
     pub best_purchase_option: Option<PurchaseOption>,
     pub assets: Option<Assets>,
     pub screenshots: Option<Screenshots>,
+    pub trailers: Option<Trailers>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -116,7 +117,10 @@ pub struct Platforms {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Reviews {
+    /// All languages, without reviews Steam marked as off-topic (review bombs).
     pub summary_filtered: Option<ReviewSummary>,
+    /// Reviews in the request's language only.
+    pub summary_language_specific: Option<ReviewSummary>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -163,6 +167,36 @@ pub struct ScreenshotFile {
     pub filename: String,
     #[serde(default)]
     pub ordinal: i64,
+}
+
+/// Trailers: `highlights` are the ones the store shows first.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Trailers {
+    #[serde(default)]
+    pub highlights: Vec<RawTrailer>,
+    #[serde(default)]
+    pub other_trailers: Vec<RawTrailer>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RawTrailer {
+    pub trailer_name: Option<String>,
+    /// `steam/apps/${FILENAME}?t=…`, for the poster images.
+    pub trailer_url_format: Option<String>,
+    pub screenshot_medium: Option<String>,
+    /// Streaming manifests (DASH and HLS); plain video files are no longer offered.
+    #[serde(default)]
+    pub adaptive_trailers: Vec<AdaptiveTrailer>,
+    /// Missing means suitable for all ages.
+    pub all_ages: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AdaptiveTrailer {
+    #[serde(default)]
+    pub cdn_path: String,
+    #[serde(default)]
+    pub encoding: String,
 }
 
 /// `IStoreService/GetTagList` response.

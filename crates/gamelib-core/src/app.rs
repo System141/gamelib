@@ -21,14 +21,14 @@ use crate::install::{self, InstallManager};
 use crate::links::{SiteRegistry, find, resolve, validate};
 use crate::model::{
     Account, Accounts, AppStatus, Download, DownloadList, DownloadSourceKind, FileOption,
-    FoundLink, GameDetail, GameLink, GameMedia, GamePage, GameQuery, Installed, LibraryItem,
-    LibraryReport, LinkCheck, LinkInput, MatchState, NewReleasesReport, OpenTarget, Outcome,
-    Platform, Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, StoresReport,
-    SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
+    FoundLink, GameDetail, GameLink, GameMedia, GamePage, GameQuery, GameReviews, Installed,
+    LibraryItem, LibraryReport, LinkCheck, LinkInput, MatchState, NewReleasesReport, OpenTarget,
+    Outcome, Platform, SearchSite, Settings, SettingsPatch, SiteInfo, Store, StoreMatch,
+    StoreSearchHit, StoresReport, SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
 };
 use crate::new_releases::{NewReleasesOptions, fetch_new_releases};
 use crate::secrets::{ItchKey, SecretStore};
-use crate::steam::{CatalogSource, SteamClient};
+use crate::steam::{self, CatalogSource, SteamClient};
 use crate::stores::matching::{self, MatchKey};
 use crate::stores::{StoreSyncOptions, gamesdb, gog, gog_account, itch, library, run_store_sync};
 use crate::sync::{SyncOptions, run_sync};
@@ -263,9 +263,21 @@ impl App {
         read::list_tags(lock(&self.reader).conn())
     }
 
-    /// Turkish description and screenshots, fetched from Steam when a game is opened.
+    /// Turkish description, screenshots, trailers and review summaries, fetched from Steam when
+    /// a game is opened.
     pub fn game_media(&self, appid: u32) -> Result<GameMedia> {
         SteamClient::new()?.fetch_media(appid, &AtomicBool::new(false))
+    }
+
+    /// The most helpful and the latest reviews, fetched from Steam when a game is opened.
+    pub fn game_reviews(&self, appid: u32) -> Result<GameReviews> {
+        steam::reviews::fetch(
+            &http::api_client(std::time::Duration::from_secs(20))?,
+            &self.options.stores.endpoints.steam_store,
+            appid,
+            &AtomicBool::new(false),
+            &Counters::default(),
+        )
     }
 
     // --- other stores -----------------------------------------------------------------------
@@ -947,6 +959,21 @@ pub fn release_page(version: Option<&str>) -> Result<String> {
     }
 }
 
+/// A web search on `site`, for buttons such as "gameplay videos on YouTube".
+pub fn search_url(site: SearchSite, query: &str) -> Result<String> {
+    let query = query.trim();
+    if query.is_empty() || query.chars().count() > 200 {
+        return Err(Error::Invalid("search"));
+    }
+    let (base, param) = match site {
+        SearchSite::Youtube => ("https://www.youtube.com/results", "search_query"),
+        SearchSite::Google => ("https://www.google.com/search", "q"),
+    };
+    reqwest::Url::parse_with_params(base, &[(param, query)])
+        .map(String::from)
+        .map_err(|e| Error::Other(e.to_string()))
+}
+
 /// The user's settings, with defaults for what was never set.
 pub(crate) fn read_settings(conn: &rusqlite::Connection) -> Result<Settings> {
     let flag = |key: &str, default: bool| -> Result<bool> {
@@ -1059,6 +1086,20 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_urls() {
+        assert_eq!(
+            search_url(SearchSite::Youtube, " Baldur's Gate 3 gameplay ").unwrap(),
+            "https://www.youtube.com/results?search_query=Baldur%27s+Gate+3+gameplay"
+        );
+        assert_eq!(
+            search_url(SearchSite::Google, "RTX 3060 vs GTX 970 & more").unwrap(),
+            "https://www.google.com/search?q=RTX+3060+vs+GTX+970+%26+more"
+        );
+        assert!(search_url(SearchSite::Google, "  ").is_err());
+        assert!(search_url(SearchSite::Google, &"x".repeat(201)).is_err());
+    }
 
     #[test]
     fn release_pages() {

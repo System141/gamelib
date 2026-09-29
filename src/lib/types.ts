@@ -88,7 +88,63 @@ export interface Screenshot {
 export interface GameMedia {
   descriptionTr: string | null;
   screenshots: Screenshot[];
+  trailers: Trailer[];
+  /** Steam's review summaries, when it sent them. */
+  reviews: ReviewSummaries | null;
 }
+
+export interface Trailer {
+  name: string;
+  /** 600×337 still. */
+  poster: string | null;
+  /** HLS playlist. */
+  stream: string;
+  mature: boolean;
+}
+
+export interface ReviewScore {
+  count: number;
+  /** Share of positive reviews, 0–100. */
+  percent: number;
+  /** Steam's 0–9 summary score. */
+  score: number;
+}
+
+export interface ReviewSummaries {
+  /** All languages, without reviews Steam marked as off-topic. */
+  all: ReviewScore | null;
+  turkish: ReviewScore | null;
+}
+
+export interface Review {
+  id: string;
+  /** Steam's language name: "turkish", "english". */
+  language: string;
+  positive: boolean;
+  text: string;
+  helpful: number;
+  hoursAtReview: number;
+  hoursTotal: number;
+  created: number;
+  earlyAccess: boolean;
+  receivedForFree: boolean;
+}
+
+/** The latest reviews (up to 100) and the time they span. */
+export interface RecentReviews {
+  count: number;
+  positive: number;
+  from: number;
+  to: number;
+}
+
+export interface GameReviews {
+  /** The most helpful reviews of the past year: Turkish ones first, then English. */
+  top: Review[];
+  recent: RecentReviews | null;
+}
+
+export type SearchSite = "youtube" | "google";
 
 export type WorkerKind = "full" | "new_releases" | "stores" | "library";
 export type SyncPhase =

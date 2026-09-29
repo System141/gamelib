@@ -1,0 +1,175 @@
+{
+  "response": {
+    "store_items": [
+      {
+        "item_type": 0,
+        "id": 292030,
+        "success": 1,
+        "visible": true,
+        "name": "The Witcher 3: Wild Hunt — Remastered",
+        "store_url_path": "app/292030/The_Witcher_3_Wild_Hunt_Remastered",
+        "store_url_slug": "The_Witcher_3_Wild_Hunt_Remastered",
+        "appid": 292030,
+        "type": 0,
+        "content_descriptorids": [
+          1,
+          5
+        ],
+        "categories": {
+          "supported_player_categoryids": [
+            2
+          ],
+          "feature_categoryids": [
+            22,
+            29,
+            30,
+            64,
+            66,
+            67,
+            68,
+            69,
+            70,
+            74,
+            78,
+            79,
+            23,
+            42,
+            43,
+            61,
+            62
+          ],
+          "controller_categoryids": [
+            18
+          ]
+        },
+        "reviews": {
+          "summary_filtered": {
+            "review_count": 826852,
+            "percent_positive": 96,
+            "review_score": 9,
+            "review_score_label": "Son Derece Olumlu"
+          },
+          "summary_unfiltered": {
+            "review_count": 836628,
+            "percent_positive": 96,
+            "review_score": 9,
+            "review_score_label": "Son Derece Olumlu"
+          },
+          "summary_language_specific": {
+            "review_count": 46186,
+            "percent_positive": 96,
+            "review_score": 9,
+            "review_score_label": "Son Derece Olumlu"
+          }
+        },
+        "basic_info": {
+          "short_description": "The Witcher 3: Wild Hunt — Remastered, bu övülen rol yapma oyununu bir dizi yükseltme ve geliştirmeyle günümüze taşıyor. Kiralık canavar avcısı Rivialı Geralt olun ve evlatlık kızınız Ciri'yi bulmak için karanlık fantastik bir açık dünyada destansı bir yolculuğa çıkın."
+        },
+        "best_purchase_option": {
+          "packageid": 68476,
+          "purchase_option_name": "The Witcher 3: Wild Hunt — Remastered",
+          "final_price_in_cents": "1749",
+          "original_price_in_cents": "3499",
+          "formatted_final_price": "$17.49",
+          "formatted_original_price": "$34.99",
+          "discount_pct": 50,
+          "active_discounts": [
+            {
+              "discount_amount": "1750",
+              "discount_description": "#discount_desc_preset_special",
+              "discount_end_date": 1790874000
+            }
+          ],
+          "user_can_purchase_as_gift": true,
+          "hide_discount_pct_for_compliance": false,
+          "included_game_count": 1,
+          "must_purchase_as_set": false,
+          "package_group": "default",
+          "price_cannot_be_displayed_as_discount": false
+        },
+        "screenshots": {
+          "all_ages_screenshots": [
+            {
+              "filename": "steam/apps/292030/f7f564ecedd09b3e503b071a637aeefdedbeedd8/ss_f7f564ecedd09b3e503b071a637aeefdedbeedd8.jpg?t=1790693338",
+              "ordinal": 1
+            },
+            {
+              "filename": "steam/apps/292030/0a38e4d0d57f15934772dbe09b322d08132d5518/ss_0a38e4d0d57f15934772dbe09b322d08132d5518.jpg?t=1790693338",
+              "ordinal": 2
+            }
+          ]
+        },
+        "trailers": {
+          "highlights": [
+            {
+              "trailer_name": "The Witcher 3: Wild Hunt — Remastered | Official Launch Trailer",
+              "trailer_url_format": "steam/apps/${FILENAME}?t=1790693333",
+              "trailer_category": 0,
+              "microtrailer": [
+                {
+                  "filename": "292030/1018852715/bf5e4c4a6409b1714754e691e778ae9f66ab9907/1790683068/microtrailer.webm",
+                  "type": "video/webm"
+                },
+                {
+                  "filename": "292030/1018852715/bf5e4c4a6409b1714754e691e778ae9f66ab9907/1790683068/microtrailer.mp4",
+                  "type": "video/mp4"
+                }
+              ],
+              "adaptive_trailers": [
+                {
+                  "cdn_path": "292030/1018852715/bf5e4c4a6409b1714754e691e778ae9f66ab9907/1790683068/dash_av1.mpd",
+                  "encoding": "dash_av1"
+                },
+                {
+                  "cdn_path": "292030/1018852715/bf5e4c4a6409b1714754e691e778ae9f66ab9907/1790683068/dash_h264.mpd",
+                  "encoding": "dash_h264"
+                },
+                {
+                  "cdn_path": "292030/1018852715/bf5e4c4a6409b1714754e691e778ae9f66ab9907/1790683068/hls_264_master.m3u8",
+                  "encoding": "hls_h264"
+                }
+              ],
+              "screenshot_medium": "257439641/32f72964eceaa2ea37c3ab03dff903a45414a89b/movie_600x337.jpg",
+              "screenshot_full": "257439641/32f72964eceaa2ea37c3ab03dff903a45414a89b/movie_full.jpg",
+              "trailer_base_id": 1351525,
+              "all_ages": false
+            },
+            {
+              "trailer_name": "The Witcher 3: Wild Hunt — Remastered | Official Announcement Trailer",
+              "trailer_url_format": "steam/apps/${FILENAME}?t=1788333497",
+              "trailer_category": 0,
+              "microtrailer": [
+                {
+                  "filename": "292030/1804271341/cbcf6a29b9e8744f446641d65c6dd78575b22693/1787921963/microtrailer.webm",
+                  "type": "video/webm"
+                },
+                {
+                  "filename": "292030/1804271341/cbcf6a29b9e8744f446641d65c6dd78575b22693/1787921963/microtrailer.mp4",
+                  "type": "video/mp4"
+                }
+              ],
+              "adaptive_trailers": [
+                {
+                  "cdn_path": "292030/1804271341/cbcf6a29b9e8744f446641d65c6dd78575b22693/1787921963/dash_av1.mpd",
+                  "encoding": "dash_av1"
+                },
+                {
+                  "cdn_path": "292030/1804271341/cbcf6a29b9e8744f446641d65c6dd78575b22693/1787921963/dash_h264.mpd",
+                  "encoding": "dash_h264"
+                },
+                {
+                  "cdn_path": "292030/1804271341/cbcf6a29b9e8744f446641d65c6dd78575b22693/1787921963/hls_264_master.m3u8",
+                  "encoding": "hls_h264"
+                }
+              ],
+              "screenshot_medium": "257411196/858e1915d7356ec75fb05e394a5e291e65113296/movie_600x337.jpg",
+              "screenshot_full": "257411196/858e1915d7356ec75fb05e394a5e291e65113296/movie_full.jpg",
+              "trailer_base_id": 1306822,
+              "all_ages": false
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

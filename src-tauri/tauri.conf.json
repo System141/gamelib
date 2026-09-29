@@ -25,7 +25,8 @@
     "security": {
       "csp": {
         "default-src": "'self' ipc: http://ipc.localhost",
-        "connect-src": "ipc: http://ipc.localhost",
+        "connect-src": "ipc: http://ipc.localhost https://video.akamai.steamstatic.com",
+        "media-src": "'self' blob: https://video.akamai.steamstatic.com",
         "img-src": "'self' data: https://shared.akamai.steamstatic.com https://shared.fastly.steamstatic.com https://*.gog-statics.com https://img.itch.zone",
         "style-src": "'self'",
         "font-src": "'self' data:",

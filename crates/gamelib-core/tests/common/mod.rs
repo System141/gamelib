@@ -56,6 +56,7 @@ pub fn item(appid: u32, name: &str, release: i64, reviews: i64, tags: &[u32]) ->
                 percent_positive: Some(if reviews > 0 { 80 } else { 0 }),
                 review_score: Some(if reviews > 0 { 7 } else { 0 }),
             }),
+            ..Default::default()
         }),
         assets: Some(Assets {
             asset_url_format: Some(format!("steam/apps/{appid}/${{FILENAME}}?t=1")),

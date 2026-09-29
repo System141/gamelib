@@ -48,6 +48,17 @@ export function useGameMedia(appid: number | null) {
   });
 }
 
+/** Helpful and latest reviews; read from Steam once per half hour per game. */
+export function useGameReviews(appid: number | null) {
+  return useQuery({
+    queryKey: ["reviews", appid],
+    queryFn: () => api.getGameReviews(appid!),
+    enabled: appid != null,
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+}
+
 export function useSites() {
   return useQuery({ queryKey: ["sites"], queryFn: api.listSites });
 }

@@ -5,6 +5,7 @@
 //! together with names, reviews, prices and image file names.
 
 pub mod assets;
+pub mod reviews;
 pub mod types;
 
 use std::sync::atomic::AtomicBool;
@@ -15,10 +16,12 @@ use serde::de::DeserializeOwned;
 use serde_json::json;
 
 use crate::http::{self, Counters};
-use crate::model::{GameMedia, Screenshot};
+use crate::model::{GameMedia, ReviewScore, ReviewSummaries, Screenshot, Trailer};
 use crate::text::clean;
 use crate::{Error, Result};
-use types::{ItemsEnvelope, QueryEnvelope, RawTag, StoreItem, TagListEnvelope, parse_items};
+use types::{
+    ItemsEnvelope, QueryEnvelope, RawTag, ReviewSummary, StoreItem, TagListEnvelope, parse_items,
+};
 
 pub const QUERY_URL: &str = "https://api.steampowered.com/IStoreQueryService/Query/v1/";
 pub const TAG_LIST_URL: &str = "https://api.steampowered.com/IStoreService/GetTagList/v1/";
@@ -91,12 +94,17 @@ impl SteamClient {
         http::get_json(&self.http, url, |r| r.query(query), cancel, &self.counters)
     }
 
-    /// Turkish description (if any) and screenshots for one game.
+    /// Turkish description (if any), screenshots, trailers and review summaries for one game.
     pub fn fetch_media(&self, appid: u32, cancel: &AtomicBool) -> Result<GameMedia> {
         let input = json!({
             "ids": [{ "appid": appid }],
             "context": { "language": UI_LANGUAGE, "country_code": COUNTRY },
-            "data_request": { "include_basic_info": true, "include_screenshots": true },
+            "data_request": {
+                "include_basic_info": true,
+                "include_screenshots": true,
+                "include_trailers": true,
+                "include_reviews": true,
+            },
         })
         .to_string();
         let env: ItemsEnvelope = self.get_json(ITEMS_URL, &[("input_json", &input)], cancel)?;
@@ -182,10 +190,45 @@ pub fn media_from_item(item: &StoreItem) -> GameMedia {
             }
         }
     }
+    let trailers = item
+        .trailers
+        .iter()
+        .flat_map(|t| t.highlights.iter().chain(&t.other_trailers))
+        .filter_map(|t| {
+            let hls = t
+                .adaptive_trailers
+                .iter()
+                .find(|a| a.encoding == "hls_h264")?;
+            Some(Trailer {
+                name: clean(t.trailer_name.as_deref()).unwrap_or_default(),
+                poster: assets::asset_url(
+                    t.trailer_url_format.as_deref(),
+                    t.screenshot_medium.as_deref(),
+                ),
+                stream: assets::trailer_stream_url(&hls.cdn_path, t.trailer_url_format.as_deref())?,
+                mature: t.all_ages == Some(false),
+            })
+        })
+        .collect();
+    let reviews = item.reviews.as_ref().map(|r| ReviewSummaries {
+        all: r.summary_filtered.as_ref().and_then(review_score),
+        turkish: r.summary_language_specific.as_ref().and_then(review_score),
+    });
     GameMedia {
         description_tr,
         screenshots,
+        trailers,
+        reviews,
     }
+}
+
+fn review_score(s: &ReviewSummary) -> Option<ReviewScore> {
+    let count = u32::try_from(s.review_count?).ok().filter(|&c| c > 0)?;
+    Some(ReviewScore {
+        count,
+        percent: s.percent_positive.unwrap_or(0).clamp(0, 100) as u8,
+        score: s.review_score.unwrap_or(0).clamp(0, 9) as u8,
+    })
 }
 
 #[cfg(test)]
@@ -205,5 +248,34 @@ mod tests {
         assert_eq!(v["query"]["filters"]["type_filters"]["include_games"], true);
         assert_eq!(v["context"]["country_code"], COUNTRY);
         assert_eq!(v["data_request"]["include_assets"], true);
+    }
+
+    #[test]
+    fn media_with_trailers_and_review_summaries() {
+        let env: ItemsEnvelope =
+            serde_json::from_str(include_str!("../../tests/fixtures/items_media.json")).unwrap();
+        let (items, skipped) = parse_items(env.response.store_items);
+        assert_eq!(skipped, 0);
+        let media = media_from_item(&items[0]);
+        assert!(media.description_tr.unwrap().starts_with("The Witcher 3"));
+        assert_eq!(media.screenshots.len(), 2);
+        assert_eq!(media.trailers.len(), 2);
+        let t = &media.trailers[0];
+        assert!(t.name.contains("Launch Trailer"), "{}", t.name);
+        assert!(
+            t.stream.starts_with(assets::VIDEO_CDN) && t.stream.contains("hls_264_master.m3u8?t=")
+        );
+        assert!(t.poster.as_deref().unwrap().starts_with(assets::CDN));
+        assert!(t.mature, "the first trailer is not for all ages");
+        let reviews = media.reviews.unwrap();
+        assert_eq!(
+            reviews.all,
+            Some(ReviewScore {
+                count: 826_852,
+                percent: 96,
+                score: 9
+            })
+        );
+        assert_eq!(reviews.turkish.map(|r| r.count), Some(46_186));
     }
 }

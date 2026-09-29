@@ -6,6 +6,8 @@
 
 /// CDN base for store item assets. (The Cloudflare host answers with a redirect, so avoid it.)
 pub const CDN: &str = "https://shared.akamai.steamstatic.com/store_item_assets/";
+/// CDN base for trailer streams (HLS playlists and their segments, served with CORS).
+pub const VIDEO_CDN: &str = "https://video.akamai.steamstatic.com/store_trailers/";
 
 const PLACEHOLDER: &str = "${FILENAME}";
 
@@ -34,6 +36,20 @@ pub fn screenshot_urls(filename: &str) -> (String, String) {
         }
     };
     (sized("600x338"), sized("1920x1080"))
+}
+
+/// The HLS playlist of a trailer stream (`<appid>/<id>/<hash>/<ts>/hls_264_master.m3u8`), with
+/// the cache-busting `t=` query of the trailer's URL format.
+pub fn trailer_stream_url(cdn_path: &str, url_format: Option<&str>) -> Option<String> {
+    let path = cdn_path.trim().trim_start_matches('/');
+    if path.is_empty() || path.contains("..") || path.contains("://") {
+        return None;
+    }
+    let query = url_format.and_then(|f| f.split_once('?')).map(|(_, q)| q);
+    Some(match query {
+        Some(q) => format!("{VIDEO_CDN}{path}?{q}"),
+        None => format!("{VIDEO_CDN}{path}"),
+    })
 }
 
 #[cfg(test)]
@@ -86,5 +102,26 @@ mod tests {
         );
         let (thumb, _) = screenshot_urls("steam/apps/1/ss_1.png");
         assert!(thumb.ends_with("ss_1.png"));
+    }
+
+    #[test]
+    fn trailer_streams() {
+        assert_eq!(
+            trailer_stream_url(
+                "292030/1018852715/bf5e/1790683068/hls_264_master.m3u8",
+                Some("steam/apps/${FILENAME}?t=1790693333")
+            )
+            .as_deref(),
+            Some(
+                "https://video.akamai.steamstatic.com/store_trailers/292030/1018852715/bf5e/1790683068/hls_264_master.m3u8?t=1790693333"
+            )
+        );
+        assert_eq!(
+            trailer_stream_url("1/2/hls.m3u8", None).as_deref(),
+            Some("https://video.akamai.steamstatic.com/store_trailers/1/2/hls.m3u8")
+        );
+        assert_eq!(trailer_stream_url("", None), None);
+        assert_eq!(trailer_stream_url("../x.m3u8", None), None);
+        assert_eq!(trailer_stream_url("https://evil/x.m3u8", None), None);
     }
 }
