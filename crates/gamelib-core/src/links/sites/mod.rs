@@ -41,8 +41,12 @@
 //! ```
 
 pub mod ankergames;
+pub mod astralgames;
 pub mod fitgirl;
+pub mod gamebounty;
 pub mod generic;
+pub mod gog_rev;
+pub mod steamrip;
 
 use super::SiteHandler;
 
@@ -52,5 +56,9 @@ pub fn builtin() -> Vec<Box<dyn SiteHandler>> {
     vec![
         Box::new(ankergames::AnkerGames::new()),
         Box::new(fitgirl::FitGirl::new()),
+        Box::new(astralgames::AstralGames::new()),
+        Box::new(gamebounty::GameBounty::new()),
+        Box::new(steamrip::SteamRIP::new()),
+        Box::new(gog_rev::GoGRevived::new()),
     ]
 }

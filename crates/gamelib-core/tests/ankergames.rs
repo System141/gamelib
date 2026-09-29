@@ -151,3 +151,10 @@ fn an_expected_page_keeps_its_version_and_size() {
     assert_eq!(found[0].version.as_deref(), Some("v1.03.3 + Co-op"));
     assert_eq!(found[0].size.as_deref(), Some("48.2 GB"));
 }
+
+#[test]
+fn the_site_info_points_at_the_new_host() {
+    let info = AnkerGames::new().info().clone();
+    assert_eq!(info.homepage.as_deref(), Some("https://ankergames.to"));
+    assert_eq!(info.domains, ["ankergames.to"]);
+}

@@ -26,7 +26,7 @@ pub struct AnkerGames {
 
 impl AnkerGames {
     pub fn new() -> Self {
-        Self::with_base("https://ankergames.net".into())
+        Self::with_base("https://ankergames.to".into())
     }
 
     /// Points the handler at a test server instead of the real site.
@@ -35,8 +35,8 @@ impl AnkerGames {
             info: SiteInfo {
                 id: SITE_ID.into(),
                 name: "AnkerGames".into(),
-                homepage: Some("https://ankergames.net".into()),
-                domains: vec!["ankergames.net".into(), "www.ankergames.net".into()],
+                homepage: Some("https://ankergames.to".into()),
+                domains: vec!["ankergames.to".into()],
                 color: "#4f5b93".into(),
                 browser_required: true,
             },

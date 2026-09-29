@@ -261,6 +261,36 @@ const MIGRATION_6: &str = r#"
 ALTER TABLE downloads ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'http';
 "#;
 
+/// AnkerGames moved from `ankergames.net` to `ankergames.to`. Stored links follow the site to
+/// its new host with path and query kept, and their checks are dropped because they describe
+/// the old address. Every other row is untouched.
+const MIGRATION_7: &str = r#"
+WITH old(prefix) AS (VALUES
+  ('https://www.ankergames.net'),
+  ('http://www.ankergames.net'),
+  ('https://ankergames.net'),
+  ('http://ankergames.net')
+)
+UPDATE game_links
+   SET url = 'https://ankergames.to' || substr(game_links.url, length(old.prefix) + 1),
+       site_id      = 'ankergames',
+       updated_at   = strftime('%s','now'),
+       check_status = NULL,
+       http_status  = NULL,
+       resolved_url = NULL,
+       final_host   = NULL,
+       redirects    = NULL,
+       file_name    = NULL,
+       size_bytes   = NULL,
+       content_type = NULL,
+       is_file      = NULL,
+       checked_at   = NULL,
+       hops         = NULL
+  FROM old
+ WHERE game_links.url = old.prefix
+    OR substr(game_links.url, 1, length(old.prefix) + 1) = old.prefix || '/';
+"#;
+
 const MIGRATIONS: &[&str] = &[
     MIGRATION_1,
     MIGRATION_2,
@@ -268,6 +298,7 @@ const MIGRATIONS: &[&str] = &[
     MIGRATION_4,
     MIGRATION_5,
     MIGRATION_6,
+    MIGRATION_7,
 ];
 
 /// Schema version this build expects.
@@ -282,4 +313,126 @@ pub fn migrate(conn: &mut Connection) -> Result<()> {
         tx.commit()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A database at version 6 (the state before the AnkerGames host move) holding one link per
+    /// shape the migration distinguishes.
+    fn db_at_v6() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        for (index, sql) in MIGRATIONS.iter().take(6).enumerate() {
+            conn.execute_batch(sql).unwrap();
+            conn.pragma_update(None, "user_version", (index + 1) as i64)
+                .unwrap();
+        }
+        insert_link(
+            &conn,
+            292030,
+            "ankergames",
+            "https://www.ankergames.net/game/the-witcher-3?utm_source=x",
+        );
+        insert_link(&conn, 1245620, "ankergames", "http://ankergames.net");
+        insert_link(&conn, 570, "other", "https://files.example.com/dota.zip");
+        insert_link(
+            &conn,
+            730,
+            "ankergames",
+            "https://ankergames.to/game/counter-strike-2",
+        );
+        conn
+    }
+
+    /// A link with every check column filled.
+    fn insert_link(conn: &Connection, appid: i64, site_id: &str, url: &str) {
+        conn.execute(
+            "INSERT INTO game_links(appid, site_id, url, label, kind, check_status, http_status,
+                                    resolved_url, final_host, redirects, file_name, size_bytes,
+                                    content_type, is_file, checked_at, hops, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'label', 'page', 'ok', 200, 'https://old.example/final',
+                     'old.example', 2, 'game.zip', 555, 'application/zip', 1, 111,
+                     '[{\"url\":\"x\",\"status\":200}]', 100, 100)",
+            rusqlite::params![appid, site_id, url],
+        )
+        .unwrap();
+    }
+
+    /// The url, site id and updated_at of one link.
+    fn row(conn: &Connection, appid: i64) -> (String, String, i64) {
+        conn.query_row(
+            "SELECT url, site_id, updated_at FROM game_links WHERE appid = ?1",
+            [appid],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap()
+    }
+
+    /// `1` when any check column of the link is still filled.
+    fn has_check(conn: &Connection, appid: i64) -> i64 {
+        conn.query_row(
+            "SELECT count(*) FROM game_links WHERE appid = ?1 AND (check_status IS NOT NULL
+                OR http_status IS NOT NULL OR resolved_url IS NOT NULL OR final_host IS NOT NULL
+                OR redirects IS NOT NULL OR file_name IS NOT NULL OR size_bytes IS NOT NULL
+                OR content_type IS NOT NULL OR is_file IS NOT NULL OR checked_at IS NOT NULL
+                OR hops IS NOT NULL)",
+            [appid],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn migration_7_moves_ankergames_links_to_the_new_host() {
+        let mut conn = db_at_v6();
+        migrate(&mut conn).unwrap();
+
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version as usize, SCHEMA_VERSION);
+
+        // The www link keeps its path and query on the new host; its check is cleared.
+        let moved = row(&conn, 292030);
+        assert_eq!(
+            moved.0,
+            "https://ankergames.to/game/the-witcher-3?utm_source=x"
+        );
+        assert_eq!(moved.1, "ankergames");
+        assert!(moved.2 > 100, "updated_at is stamped");
+        assert_eq!(has_check(&conn, 292030), 0);
+
+        // A bare host link becomes the new host without gaining a path.
+        assert_eq!(row(&conn, 1245620).0, "https://ankergames.to");
+        assert_eq!(has_check(&conn, 1245620), 0);
+    }
+
+    #[test]
+    fn migration_7_leaves_other_links_alone() {
+        let mut conn = db_at_v6();
+        migrate(&mut conn).unwrap();
+
+        assert_eq!(
+            row(&conn, 570),
+            (
+                "https://files.example.com/dota.zip".into(),
+                "other".into(),
+                100
+            ),
+            "an unrelated link is untouched"
+        );
+        assert_eq!(has_check(&conn, 570), 1);
+
+        assert_eq!(
+            row(&conn, 730),
+            (
+                "https://ankergames.to/game/counter-strike-2".into(),
+                "ankergames".into(),
+                100
+            ),
+            "an up-to-date url keeps its row as it is"
+        );
+        assert_eq!(has_check(&conn, 730), 1);
+    }
 }

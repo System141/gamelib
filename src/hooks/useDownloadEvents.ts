@@ -81,8 +81,10 @@ export function useDownloadEvents() {
 const toastError = (e: unknown) => showToast({ tone: "error", title: errorText(toCmdError(e)) });
 
 function announceDownload(d: Download) {
-  // A finished download is announced by its install.
-  if (d.state === "failed") {
+  if (d.state === "completed") {
+    // no action: the files are not runnable until the install finishes and announces itself
+    showToast({ tone: "success", title: tr.downloads.toastDone(d.title) });
+  } else if (d.state === "failed") {
     showToast({ tone: "error", title: tr.downloads.toastFailed(d.title), description: d.error ? errorText(d.error) : undefined }, 9000);
   }
 }

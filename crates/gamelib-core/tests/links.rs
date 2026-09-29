@@ -151,6 +151,26 @@ fn site_specific_handler_is_detected() {
 }
 
 #[test]
+fn builtin_registry_detects_the_known_sites() {
+    let sites = SiteRegistry::with_builtin_sites();
+    for (url, id) in [
+        ("https://ankergames.to/game/elden-ring", "ankergames"),
+        ("https://astralgames.net/game/elden-ring", "astralgames"),
+        (
+            "https://gamebounty.world/elden-ring-free-pc-download",
+            "gamebounty",
+        ),
+        ("https://steamrip.com/elden-ring-free-download/", "steamrip"),
+        ("https://gog-rev.com/games/elden_ring/", "gog-rev"),
+        // An unknown host still falls back to the generic handler.
+        ("https://files.example.com/dota.zip", "generic"),
+    ] {
+        let parsed = Url::parse(url).unwrap();
+        assert_eq!(sites.detect(&parsed).info().id, id, "{url}");
+    }
+}
+
+#[test]
 fn magnet_links_are_stored_without_a_host() {
     let db = db_with_game();
     let sites = registry();
