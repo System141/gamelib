@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fold, normalizeName } from "./fold";
 import { comparableModel, listVerdict, vendorOf, worst } from "./requirements";
+import { formatMoney, priceSteps, priceVerdict } from "./prices";
 import {
   fileKind,
   formatBytes,
@@ -166,5 +167,42 @@ describe("requirements", () => {
     expect(comparableModel("Dual Core 3.0 Ghz", null)).toBeNull();
     expect(comparableModel("128mb Video Memory, capable of Shader Model 2.0+", null)).toBeNull();
     expect(comparableModel("Intel I5 4690 / AMD FX 8350 / Snapdragon X Elite", "AMD Ryzen 5 5600")).toBe("AMD FX 8350");
+  });
+});
+
+describe("prices", () => {
+  const usd = (amount: number) => ({ amount, currency: "USD" });
+
+  it("formats money for Turkish readers", () => {
+    expect(formatMoney(usd(9.99))).toBe("$9,99");
+    expect(formatMoney({ amount: 299, currency: "TRY" })).toBe("₺299,00");
+  });
+
+  it("turns price changes into steps", () => {
+    const steps = priceSteps(
+      [
+        { at: 100, price: 20, regular: 20, cut: 0 },
+        { at: 200, price: 10, regular: 20, cut: 50 },
+      ],
+      500,
+    );
+    expect(steps).toEqual([
+      { from: 100, to: 200, price: 20, regular: 20, cut: 0 },
+      { from: 200, to: 500, price: 10, regular: 20, cut: 50 },
+    ]);
+    expect(priceSteps([], 500)).toEqual([]);
+  });
+
+  it("compares today's best price with the lowest ever", () => {
+    const lowest = { shop: "GOG", price: usd(4), regular: usd(40), cut: 90, at: 1 };
+    expect(priceVerdict(usd(4), lowest)).toEqual({ kind: "lowest", percent: 0 });
+    expect(priceVerdict(usd(4.5), lowest)).toEqual({ kind: "near", percent: 13 });
+    expect(priceVerdict(usd(9.99), lowest)).toEqual({ kind: "above", percent: 150 });
+    expect(priceVerdict({ amount: 1, currency: "EUR" }, lowest)).toBeNull();
+    expect(priceVerdict(null, lowest)).toBeNull();
+    // Once given away: free again counts as the lowest, anything else can't be a percentage.
+    const free = { ...lowest, price: usd(0), cut: 100 };
+    expect(priceVerdict(usd(0), free)).toEqual({ kind: "lowest", percent: 0 });
+    expect(priceVerdict(usd(4), free)).toBeNull();
   });
 });

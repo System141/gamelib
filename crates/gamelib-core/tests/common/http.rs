@@ -14,6 +14,7 @@ pub struct Request {
     pub query: HashMap<String, String>,
     /// Header names in lower case.
     pub headers: HashMap<String, String>,
+    pub body: String,
 }
 
 impl Request {
@@ -135,16 +136,34 @@ fn serve(mut stream: TcpStream, handler: &dyn Fn(&Request) -> Response, log: &Mu
         Some((p, q)) => (p.to_owned(), parse_query(q)),
         None => (target.clone(), HashMap::new()),
     };
-    let headers = lines
+    let headers: HashMap<String, String> = lines
         .take_while(|l| !l.is_empty())
         .filter_map(|l| l.split_once(':'))
         .map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_owned()))
         .collect();
+    // The body (read fully, so closing the connection cannot reset it before the client reads
+    // the response).
+    let header_end = buf
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .map_or(buf.len(), |p| p + 4);
+    let length: usize = headers
+        .get("content-length")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let mut body = buf[header_end..].to_vec();
+    while body.len() < length {
+        match stream.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => body.extend_from_slice(&chunk[..n]),
+        }
+    }
     let request = Request {
         method,
         path,
         query,
         headers,
+        body: String::from_utf8_lossy(&body).into_owned(),
     };
     log.lock().unwrap().push(request.clone());
     let response = handler(&request);

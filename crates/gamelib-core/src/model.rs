@@ -381,6 +381,97 @@ pub struct RequirementList {
     pub checks: Vec<crate::pc::requirements::Check>,
 }
 
+/// A game's prices in legitimate shops, from IsThereAnyDeal (Turkish storefronts).
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GamePrices {
+    /// Whether IsThereAnyDeal knows the game; nothing else is filled in when it does not.
+    pub found: bool,
+    /// The game's page on IsThereAnyDeal.
+    pub url: Option<String>,
+    /// Current prices in each shop, cheapest first.
+    pub deals: Vec<Deal>,
+    /// The lowest price ever in any shop, with where and when.
+    pub lowest: Option<LowestPrice>,
+    /// Lowest prices of the past year and the past three months.
+    pub lowest_year: Option<Money>,
+    pub lowest_months: Option<Money>,
+    /// Subscriptions that include the game (PC Game Pass, EA Play, …).
+    pub subscriptions: Vec<Subscription>,
+    /// Bundles on sale now that include it.
+    pub bundles: Vec<Bundle>,
+    /// Steam's price changes over the past two years, oldest first.
+    pub history: Vec<PricePoint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Money {
+    pub amount: f64,
+    /// ISO 4217 code ("USD", "TRY").
+    pub currency: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Deal {
+    pub shop: String,
+    pub price: Money,
+    pub regular: Money,
+    /// Discount in percent.
+    pub cut: u8,
+    /// The shop's own lowest price for the game.
+    pub store_low: Option<Money>,
+    /// DRM of the copy (Steam, GOG's DRM-free, …).
+    pub drm: Vec<String>,
+    /// When the discount ends (Unix seconds), when known.
+    pub expiry: Option<i64>,
+    /// Link to the offer (through IsThereAnyDeal).
+    pub url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LowestPrice {
+    pub shop: String,
+    pub price: Money,
+    pub regular: Money,
+    pub cut: u8,
+    /// When (Unix seconds).
+    pub at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Subscription {
+    pub name: String,
+    /// When the game leaves the subscription (Unix seconds), when announced.
+    pub leaving: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bundle {
+    pub title: String,
+    /// Who sells it (Humble Bundle, Fanatical, …).
+    pub store: String,
+    /// The cheapest tier that includes the game.
+    pub price: Option<Money>,
+    pub expiry: Option<i64>,
+    /// IsThereAnyDeal's page about the bundle, which links on to the seller.
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PricePoint {
+    /// Unix seconds.
+    pub at: i64,
+    pub price: f64,
+    pub regular: f64,
+    pub cut: u8,
+}
+
 /// A site "search the web" buttons open (gameplay videos, hardware comparisons).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -781,6 +872,16 @@ pub struct StoreCounts {
 pub struct Accounts {
     pub gog: Option<Account>,
     pub itch: Option<Account>,
+    /// The IsThereAnyDeal API key (for prices), when one is saved. The key itself stays in Rust.
+    #[serde(default)]
+    pub itad: Option<ApiKeyStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiKeyStatus {
+    /// When it was saved (Unix seconds).
+    pub saved_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

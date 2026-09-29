@@ -3,6 +3,7 @@
 import clsx from "clsx";
 import {
   ArrowUpCircle,
+  BadgePercent,
   CircleCheck,
   ExternalLink,
   FolderOpen,
@@ -12,6 +13,7 @@ import {
   LogOut,
   RefreshCw,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
@@ -22,6 +24,7 @@ import type { Accounts, AppStatus, CmdError, Store } from "../lib/types";
 import { useAccounts, useAccountsUpdate, useSettings, useSettingsUpdate } from "../hooks/useData";
 import { useCheckUpdate, useInstallUpdate, useUpdateStatus } from "../hooks/useUpdater";
 import { StoreMark } from "./badges";
+import { ItadKeyForm } from "./PricesSection";
 import { SmallButton } from "./ui";
 
 export function SettingsView({ status }: { status: AppStatus | undefined }) {
@@ -33,6 +36,7 @@ export function SettingsView({ status }: { status: AppStatus | undefined }) {
         <Section title={tr.accounts.title} icon={<ShieldCheck size={17} className="text-success" />}>
           <GogCard />
           <ItchCard />
+          <ItadCard />
           <p className="text-xs leading-relaxed text-ink-500">{tr.accounts.storage}</p>
         </Section>
 
@@ -267,6 +271,52 @@ function ItchCard() {
         </>
       )}
     </AccountCard>
+  );
+}
+
+/** The IsThereAnyDeal key behind the prices in game details. */
+function ItadCard() {
+  const accounts = useAccounts();
+  const update = useAccountsUpdate();
+  const saved = accounts.data?.itad ?? null;
+  const remove = () =>
+    api
+      .itadRemoveKey()
+      .then((a) => {
+        update(a);
+        showToast({ tone: "info", title: tr.accounts.toastItadRemoved });
+      })
+      .catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
+
+  return (
+    <div className="rounded-xl bg-ink-800/70 p-4 ring-1 ring-white/6">
+      <div className="flex items-center gap-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent-soft ring-1 ring-accent/30">
+          <BadgePercent size={17} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-ink-50">{tr.accounts.itadTitle}</div>
+          {saved && (
+            <div className="mt-0.5 inline-flex items-center gap-1.5 text-[13px] text-success">
+              <CircleCheck size={14} />
+              {tr.accounts.itadSaved}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mt-3">
+        {saved ? (
+          <SmallButton onClick={remove} icon={<Trash2 size={13} />}>
+            {tr.accounts.itadRemove}
+          </SmallButton>
+        ) : (
+          <>
+            <p className="text-[13px] leading-relaxed text-ink-300">{tr.accounts.itadDesc}</p>
+            <ItadKeyForm />
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

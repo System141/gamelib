@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use gamelib_core::app::account_page;
-use gamelib_core::app::{App, EventSink, release_page, search_url, steam_url};
+use gamelib_core::app::{App, EventSink, price_link, release_page, search_url, steam_url};
 use gamelib_core::model::{
     GameQuery, LinkInput, MatchState, OpenTarget, SearchSite, SettingsPatch, Store,
 };
@@ -162,6 +162,11 @@ struct SteamArgs {
 }
 
 #[derive(Deserialize)]
+struct UrlArgs {
+    url: String,
+}
+
+#[derive(Deserialize)]
 struct SearchArgs {
     site: SearchSite,
     query: String,
@@ -260,6 +265,13 @@ fn dispatch(app: &App, command: &str, args: Value) -> std::result::Result<Value,
         "list_tags" => to_json(&app.list_tags()?),
         "get_game_media" => to_json(&app.game_media(parse::<AppidArgs>(args)?.appid)?),
         "get_game_reviews" => to_json(&app.game_reviews(parse::<AppidArgs>(args)?.appid)?),
+        "get_game_prices" => to_json(&app.game_prices(parse::<AppidArgs>(args)?.appid)?),
+        "itad_set_key" => to_json(&app.itad_set_key(&parse::<KeyArgs>(args)?.key)?),
+        "itad_remove_key" => to_json(&app.itad_remove_key()?),
+        "open_price_link" => {
+            let a: UrlArgs = parse(args)?;
+            json!({ "url": price_link(&a.url)? })
+        }
         "get_game_requirements" => {
             to_json(&app.game_requirements(parse::<AppidArgs>(args)?.appid)?)
         }

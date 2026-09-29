@@ -33,6 +33,8 @@ pub struct StoreEndpoints {
     pub itch_api: String,
     /// store.steampowered.com: reviews and system requirements.
     pub steam_store: String,
+    /// api.isthereanydeal.com: prices.
+    pub itad_api: String,
 }
 
 impl Default for StoreEndpoints {
@@ -45,6 +47,7 @@ impl Default for StoreEndpoints {
             gamesdb: "https://gamesdb.gog.com".into(),
             itch_api: "https://api.itch.io".into(),
             steam_store: "https://store.steampowered.com".into(),
+            itad_api: crate::prices::itad::API.into(),
         }
     }
 }
@@ -60,7 +63,8 @@ impl StoreEndpoints {
             gog_auth: base.clone(),
             gamesdb: base.clone(),
             itch_api: base.clone(),
-            steam_store: base,
+            steam_store: base.clone(),
+            itad_api: base,
         }
     }
 }

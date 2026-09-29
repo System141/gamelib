@@ -59,6 +59,17 @@ export function useGameRequirements(appid: number | null) {
   });
 }
 
+/** Prices from IsThereAnyDeal (null without a key); read at most once per half hour per game. */
+export function useGamePrices(appid: number | null) {
+  return useQuery({
+    queryKey: ["prices", appid],
+    queryFn: () => api.getGamePrices(appid!),
+    enabled: appid != null,
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
+}
+
 /** Helpful and latest reviews; read from Steam once per half hour per game. */
 export function useGameReviews(appid: number | null) {
   return useQuery({
@@ -191,6 +202,7 @@ export function useAccountsUpdate() {
     void qc.invalidateQueries({ queryKey: ["library"] });
     void qc.invalidateQueries({ queryKey: ["status"] });
     void qc.invalidateQueries({ queryKey: ["stores"] });
+    void qc.invalidateQueries({ queryKey: ["prices"] });
   };
 }
 

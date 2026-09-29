@@ -63,6 +63,7 @@ async function call(cmd: string, args: Record<string, unknown>): Promise<unknown
       "open_gog_login_page",
       "open_release_page",
       "open_search",
+      "open_price_link",
     ].includes(cmd)
   ) {
     openUrl((body as { url: string }).url);

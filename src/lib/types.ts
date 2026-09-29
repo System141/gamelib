@@ -146,6 +146,75 @@ export interface GameReviews {
 
 export type SearchSite = "youtube" | "google";
 
+// --- prices (IsThereAnyDeal) -----------------------------------------------------------------
+
+export interface Money {
+  amount: number;
+  /** ISO 4217 code: "USD", "TRY". */
+  currency: string;
+}
+
+export interface Deal {
+  shop: string;
+  price: Money;
+  regular: Money;
+  /** Discount in percent. */
+  cut: number;
+  /** The shop's own lowest price for the game. */
+  storeLow: Money | null;
+  drm: string[];
+  /** When the discount ends (Unix seconds). */
+  expiry: number | null;
+  url: string;
+}
+
+export interface LowestPrice {
+  shop: string;
+  price: Money;
+  regular: Money;
+  cut: number;
+  at: number;
+}
+
+export interface Subscription {
+  name: string;
+  /** When the game leaves it (Unix seconds), when announced. */
+  leaving: number | null;
+}
+
+export interface Bundle {
+  title: string;
+  /** Who sells it. */
+  store: string;
+  /** The cheapest tier that includes the game. */
+  price: Money | null;
+  expiry: number | null;
+  /** IsThereAnyDeal's page about the bundle. */
+  url: string | null;
+}
+
+export interface PricePoint {
+  at: number;
+  price: number;
+  regular: number;
+  cut: number;
+}
+
+export interface GamePrices {
+  /** Whether IsThereAnyDeal knows the game. */
+  found: boolean;
+  url: string | null;
+  /** Current prices, cheapest first. */
+  deals: Deal[];
+  lowest: LowestPrice | null;
+  lowestYear: Money | null;
+  lowestMonths: Money | null;
+  subscriptions: Subscription[];
+  bundles: Bundle[];
+  /** Steam's price changes over the past two years, oldest first. */
+  history: PricePoint[];
+}
+
 // --- system requirements ----------------------------------------------------------------------
 
 export type RequirementKind = "os" | "processor" | "memory" | "graphics" | "directx" | "storage" | "sound" | "network" | "notes" | "other";
@@ -459,7 +528,14 @@ export interface Account {
 /** The stores that have an account, a product page and a download picker. */
 export type AccountStore = "gog" | "itch";
 
-export type Accounts = Record<AccountStore, Account | null>;
+export type Accounts = Record<AccountStore, Account | null> & {
+  /** The IsThereAnyDeal API key (for prices), when one is saved; the key itself stays in Rust. */
+  itad: ApiKeyStatus | null;
+};
+
+export interface ApiKeyStatus {
+  savedAt: number;
+}
 
 export interface LibraryItem {
   store: Store;

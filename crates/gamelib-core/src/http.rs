@@ -4,9 +4,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use reqwest::StatusCode;
 use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::RETRY_AFTER;
+use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 
 use crate::{Error, Result, sleep_cancellable};
@@ -57,6 +57,19 @@ pub fn get_text(
     cancel: &AtomicBool,
     counters: &Counters,
 ) -> Result<String> {
+    request_text(client, Method::GET, url, build, cancel, counters)
+}
+
+/// [`get_text`] for any method; only for requests that are safe to repeat (such as POSTs that
+/// only read).
+pub fn request_text(
+    client: &Client,
+    method: Method,
+    url: &str,
+    build: impl Fn(RequestBuilder) -> RequestBuilder,
+    cancel: &AtomicBool,
+    counters: &Counters,
+) -> Result<String> {
     let mut attempt = 0;
     loop {
         if cancel.load(Ordering::Relaxed) {
@@ -65,7 +78,7 @@ pub fn get_text(
         attempt += 1;
         counters.requests.fetch_add(1, Ordering::Relaxed);
         let mut wait = None;
-        let err = match build(client.get(url)).send() {
+        let err = match build(client.request(method.clone(), url)).send() {
             Ok(resp) if resp.status().is_success() => match resp.text() {
                 Ok(body) => return Ok(body),
                 Err(e) => Error::from(e),

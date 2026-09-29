@@ -16,6 +16,7 @@ import type {
   GameDetail,
   GameLink,
   GameMedia,
+  GamePrices,
   GameRequirements,
   GameReviews,
   GamePage,
@@ -72,6 +73,12 @@ export const api = {
   gogLogin: () => invoke<Accounts>("gog_login"),
   gogLoginWithCode: (redirect: string) => invoke<Accounts>("gog_login_with_code", { redirect }),
   itchSetKey: (key: string) => invoke<Accounts>("itch_set_key", { key }),
+  itadSetKey: (key: string) => invoke<Accounts>("itad_set_key", { key }),
+  itadRemoveKey: () => invoke<Accounts>("itad_remove_key"),
+  /** Prices from IsThereAnyDeal; null without an API key. */
+  getGamePrices: (appid: number) => invoke<GamePrices | null>("get_game_prices", { appid }),
+  /** An offer, bundle or page on IsThereAnyDeal (only its own addresses open). */
+  openPriceLink: (url: string) => invoke<void>("open_price_link", { url }),
   signOut: (store: Store) => invoke<Accounts>("sign_out", { store }),
   startLibrarySync: () => invoke<void>("start_library_sync"),
   getLibrary: (store: Store | null = null) => invoke<LibraryItem[]>("get_library", { store }),

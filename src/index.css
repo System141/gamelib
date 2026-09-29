@@ -23,6 +23,8 @@
   --color-accent: #66c0f4;
   --color-accent-strong: #3aa8ee;
   --color-accent-soft: #9fd8fa;
+  /* Chart series: the accent stepped into the dark-mode band (validated against ink-800). */
+  --color-chart: #3399dd;
   --color-violet: #a78bfa;
   --color-violet-strong: #8b6cf6;
 

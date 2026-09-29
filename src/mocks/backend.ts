@@ -20,6 +20,7 @@ import type {
   GameDetail,
   GameLink,
   GameMedia,
+  GamePrices,
   GameRequirements,
   GameReviews,
   GamePage,
@@ -125,7 +126,7 @@ export class MockBackend {
   private allMatches = new Map<number, StoreMatch[]>();
   private matches = new Map<number, StoreMatch[]>();
   private lastStoreSyncAt: number | null = null;
-  private accounts: Accounts = { gog: null, itch: null };
+  private accounts: Accounts = { gog: null, itch: null, itad: null };
   /** Owned products as `store:productId`. */
   private owned = new Set<string>();
   private itchLibrary: LibraryItem[] = [];
@@ -246,6 +247,17 @@ export class MockBackend {
         return this.signIn("itch", "Oyuncu");
       case "sign_out":
         return this.signOut(args.store);
+      case "itad_set_key":
+        await sleep(500);
+        if (String(args.key).trim().length < 8) throw invalid("itad_key");
+        this.accounts = { ...this.accounts, itad: { savedAt: nowSeconds() } };
+        return this.accounts;
+      case "itad_remove_key":
+        this.accounts = { ...this.accounts, itad: null };
+        return this.accounts;
+      case "get_game_prices":
+        await sleep(500);
+        return this.accounts.itad ? fakePrices(args.appid) : null;
       case "start_library_sync":
         return this.startWorker("library");
       case "get_library":
@@ -337,6 +349,7 @@ export class MockBackend {
         await sleep(900);
         return this.checkLink(args.id as number);
       case "open_link":
+      case "open_price_link":
       case "open_in_steam":
       case "open_browser":
       case "open_search":
@@ -1432,5 +1445,75 @@ function fakeRequirements(): GameRequirements {
       diskSsd: true,
       diskPath: "C:\\Users\\oyuncu\\Games",
     },
+  };
+}
+
+/** IsThereAnyDeal-like prices: three shops, lows, a subscription, a bundle and two years of Steam history. */
+function fakePrices(appid: number): GamePrices {
+  const now = nowSeconds();
+  const day = 86_400;
+  const usd = (amount: number) => ({ amount, currency: "USD" });
+  const regular = 19.99 + (appid % 3) * 10;
+  const at = (daysAgo: number) => now - daysAgo * day;
+  return {
+    found: true,
+    url: "https://isthereanydeal.com/game/example/info/",
+    deals: [
+      {
+        shop: "GOG",
+        price: usd(+(regular * 0.3).toFixed(2)),
+        regular: usd(regular),
+        cut: 70,
+        storeLow: usd(+(regular * 0.25).toFixed(2)),
+        drm: ["DRM Free"],
+        expiry: now + 5 * day,
+        url: "https://itad.link/example/35/",
+      },
+      {
+        shop: "Steam",
+        price: usd(+(regular * 0.5).toFixed(2)),
+        regular: usd(regular),
+        cut: 50,
+        storeLow: usd(+(regular * 0.25).toFixed(2)),
+        drm: ["Steam"],
+        expiry: now + 9 * day,
+        url: "https://itad.link/example/61/",
+      },
+      {
+        shop: "Humble Store",
+        price: usd(regular),
+        regular: usd(regular),
+        cut: 0,
+        storeLow: null,
+        drm: ["Steam"],
+        expiry: null,
+        url: "https://itad.link/example/37/",
+      },
+    ],
+    lowest: { shop: "Steam", price: usd(+(regular * 0.25).toFixed(2)), regular: usd(regular), cut: 75, at: at(300) },
+    lowestYear: usd(+(regular * 0.25).toFixed(2)),
+    lowestMonths: usd(+(regular * 0.3).toFixed(2)),
+    subscriptions: appid % 2 === 0 ? [{ name: "PC Game Pass", leaving: now + 60 * day }] : [],
+    bundles: [
+      {
+        title: "Macera Paketi",
+        store: "Fanatical",
+        price: usd(7.49),
+        expiry: now + 12 * day,
+        url: "https://isthereanydeal.com/bundles/1/",
+      },
+    ],
+    history: [
+      { at: at(700), price: regular, regular, cut: 0 },
+      { at: at(560), price: +(regular * 0.5).toFixed(2), regular, cut: 50 },
+      { at: at(546), price: regular, regular, cut: 0 },
+      { at: at(420), price: +(regular * 0.4).toFixed(2), regular, cut: 60 },
+      { at: at(406), price: regular, regular, cut: 0 },
+      { at: at(300), price: +(regular * 0.25).toFixed(2), regular, cut: 75 },
+      { at: at(286), price: regular, regular, cut: 0 },
+      { at: at(150), price: +(regular * 0.4).toFixed(2), regular, cut: 60 },
+      { at: at(136), price: regular, regular, cut: 0 },
+      { at: at(4), price: +(regular * 0.5).toFixed(2), regular, cut: 50 },
+    ],
   };
 }

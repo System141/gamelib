@@ -20,15 +20,15 @@ use crate::http::{self, Counters, Pacer};
 use crate::install::{self, InstallManager};
 use crate::links::{SiteRegistry, find, resolve, validate};
 use crate::model::{
-    Account, Accounts, AppStatus, Download, DownloadList, DownloadSourceKind, FileOption,
-    FoundLink, GameDetail, GameLink, GameMedia, GamePage, GameQuery, GameRequirements, GameReviews,
-    Installed, LibraryItem, LibraryReport, LinkCheck, LinkInput, MatchState, NewReleasesReport,
-    OpenTarget, Outcome, Platform, RequirementList, SearchSite, Settings, SettingsPatch, SiteInfo,
-    Store, StoreMatch, StoreSearchHit, StoresReport, SyncFinished, SyncProgress, SyncReport,
-    TagInfo, WorkerKind,
+    Account, Accounts, ApiKeyStatus, AppStatus, Download, DownloadList, DownloadSourceKind,
+    FileOption, FoundLink, GameDetail, GameLink, GameMedia, GamePage, GamePrices, GameQuery,
+    GameRequirements, GameReviews, Installed, LibraryItem, LibraryReport, LinkCheck, LinkInput,
+    MatchState, NewReleasesReport, OpenTarget, Outcome, Platform, RequirementList, SearchSite,
+    Settings, SettingsPatch, SiteInfo, Store, StoreMatch, StoreSearchHit, StoresReport,
+    SyncFinished, SyncProgress, SyncReport, TagInfo, WorkerKind,
 };
 use crate::new_releases::{NewReleasesOptions, fetch_new_releases};
-use crate::secrets::{ItchKey, SecretStore};
+use crate::secrets::{ItadKey, ItchKey, SecretStore};
 use crate::steam::{self, CatalogSource, SteamClient};
 use crate::stores::matching::{self, MatchKey};
 use crate::stores::{StoreSyncOptions, gamesdb, gog, gog_account, itch, library, run_store_sync};
@@ -488,7 +488,51 @@ impl App {
             itch: s.itch.map(|k| Account {
                 username: k.username,
             }),
+            itad: s.itad.map(|k| ApiKeyStatus {
+                saved_at: k.saved_at,
+            }),
         })
+    }
+
+    /// Checks and saves the user's IsThereAnyDeal API key.
+    pub fn itad_set_key(&self, key: &str) -> Result<Accounts> {
+        let key = key.trim();
+        crate::prices::itad::check_key(
+            &http::api_client(std::time::Duration::from_secs(20))?,
+            &self.options.stores.endpoints.itad_api,
+            key,
+            &AtomicBool::new(false),
+            &Counters::default(),
+        )?;
+        self.secrets.update(|s| {
+            s.itad = Some(ItadKey {
+                api_key: key.to_owned(),
+                saved_at: unix_now(),
+            });
+        })?;
+        self.accounts()
+    }
+
+    pub fn itad_remove_key(&self) -> Result<Accounts> {
+        self.secrets.update(|s| s.itad = None)?;
+        self.accounts()
+    }
+
+    /// The game's prices from IsThereAnyDeal; `None` without an API key.
+    pub fn game_prices(&self, appid: u32) -> Result<Option<GamePrices>> {
+        let Some(key) = self.secrets.load()?.itad else {
+            return Ok(None);
+        };
+        crate::prices::itad::fetch(
+            &http::api_client(std::time::Duration::from_secs(20))?,
+            &self.options.stores.endpoints.itad_api,
+            &key.api_key,
+            appid,
+            unix_now(),
+            &AtomicBool::new(false),
+            &Counters::default(),
+        )
+        .map(Some)
     }
 
     /// GOG's sign-in page; it ends on a redirect that [`App::gog_login_with_code`] accepts.
@@ -1001,6 +1045,20 @@ pub fn release_page(version: Option<&str>) -> Result<String> {
     }
 }
 
+/// A link from the prices section (an offer, a bundle, the game's or the API key page): only
+/// IsThereAnyDeal's own pages and its offer links open.
+pub fn price_link(url: &str) -> Result<String> {
+    let parsed = reqwest::Url::parse(url.trim()).map_err(|_| Error::Invalid("url_parse"))?;
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    let allowed = host == "itad.link"
+        || host == "isthereanydeal.com"
+        || host.ends_with(".isthereanydeal.com");
+    if parsed.scheme() != "https" || !allowed || !parsed.username().is_empty() {
+        return Err(Error::Invalid("url_host"));
+    }
+    Ok(parsed.into())
+}
+
 /// A web search on `site`, for buttons such as "gameplay videos on YouTube".
 pub fn search_url(site: SearchSite, query: &str) -> Result<String> {
     let query = query.trim();
@@ -1128,6 +1186,27 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn price_links() {
+        for ok in [
+            "https://itad.link/018d937f/61/",
+            "https://isthereanydeal.com/game/x/info/",
+            "https://isthereanydeal.com/apps/my/",
+        ] {
+            assert_eq!(price_link(ok).unwrap(), ok);
+        }
+        for bad in [
+            "http://itad.link/x",
+            "https://isthereanydeal.com.evil.example/",
+            "https://user@itad.link/x",
+            "https://www.humblebundle.com/games/x",
+            "javascript:alert(1)",
+            "",
+        ] {
+            assert!(price_link(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn search_urls() {

@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
-use gamelib_core::app::{App, search_url, steam_url};
+use gamelib_core::app::{App, price_link, search_url, steam_url};
 use gamelib_core::model::{
     Accounts, AppStatus, Download, DownloadList, FileOption, FoundLink, GameDetail, GameLink,
-    GameMedia, GamePage, GameQuery, GameRequirements, GameReviews, Installed, LibraryItem,
-    LinkCheck, LinkInput, MatchState, OpenTarget, SearchSite, Settings, SettingsPatch, SiteInfo,
-    Store, StoreMatch, StoreSearchHit, TagInfo,
+    GameMedia, GamePage, GamePrices, GameQuery, GameRequirements, GameReviews, Installed,
+    LibraryItem, LinkCheck, LinkInput, MatchState, OpenTarget, SearchSite, Settings, SettingsPatch,
+    SiteInfo, Store, StoreMatch, StoreSearchHit, TagInfo,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
@@ -508,6 +508,30 @@ pub async fn open_browser(
     url: String,
 ) -> CmdResult<()> {
     crate::browser::open(&handle, Arc::clone(&app), appid, title, url).await
+}
+
+#[tauri::command]
+pub async fn get_game_prices(
+    app: State<'_, Arc<App>>,
+    appid: u32,
+) -> CmdResult<Option<GamePrices>> {
+    blocking(&app, move |app| app.game_prices(appid)).await
+}
+
+#[tauri::command]
+pub async fn itad_set_key(app: State<'_, Arc<App>>, key: String) -> CmdResult<Accounts> {
+    blocking(&app, move |app| app.itad_set_key(&key)).await
+}
+
+#[tauri::command]
+pub async fn itad_remove_key(app: State<'_, Arc<App>>) -> CmdResult<Accounts> {
+    blocking(&app, App::itad_remove_key).await
+}
+
+/// An offer, a bundle, a game's page or the API key page on IsThereAnyDeal.
+#[tauri::command]
+pub fn open_price_link(handle: AppHandle, url: String) -> CmdResult<()> {
+    open_url(&handle, price_link(&url)?)
 }
 
 /// A web search (gameplay videos, hardware comparisons) in the default browser.

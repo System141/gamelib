@@ -1,4 +1,5 @@
-//! Account credentials (GOG tokens, the itch.io API key), kept out of the database.
+//! Account credentials (GOG tokens, the itch.io and IsThereAnyDeal API keys), kept out of the
+//! database.
 //!
 //! They live in `secrets.bin` next to the database. On Windows the file is encrypted with DPAPI
 //! for the current user; elsewhere it is plain JSON readable only by its owner (0600). Nothing
@@ -19,6 +20,9 @@ pub struct Secrets {
     pub gog: Option<GogTokens>,
     #[serde(default)]
     pub itch: Option<ItchKey>,
+    /// The user's IsThereAnyDeal API key, for prices.
+    #[serde(default)]
+    pub itad: Option<ItadKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +33,12 @@ pub struct GogTokens {
     pub expires_at: i64,
     pub user_id: String,
     pub username: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ItadKey {
+    pub api_key: String,
+    pub saved_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
