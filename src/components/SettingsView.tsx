@@ -20,7 +20,6 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
 import { api, toCmdError } from "../lib/api";
@@ -33,6 +32,7 @@ import {
   useHiddenFound,
   useScanInstalled,
   useScanningInstalled,
+  useSetFoundHidden,
   useSettings,
   useSettingsUpdate,
 } from "../hooks/useData";
@@ -516,18 +516,17 @@ function ScanFolders() {
 /** Found games the user took off the installed list, to bring back. */
 function HiddenGames() {
   const hidden = useHiddenFound();
-  const qc = useQueryClient();
+  const setHidden = useSetFoundHidden();
   const games = hidden.data ?? [];
   if (games.length === 0) return null;
   const unhide = (productId: string, title: string) =>
-    api
-      .setFoundHidden(productId, false)
-      .then(() => {
-        void qc.invalidateQueries({ queryKey: ["hidden-found"] });
-        void qc.invalidateQueries({ queryKey: ["installs"] });
-        showToast({ tone: "success", title: tr.found.toastUnhidden(title) });
-      })
-      .catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }));
+    setHidden.mutate(
+      { productId, hidden: false },
+      {
+        onSuccess: () => showToast({ tone: "success", title: tr.found.toastUnhidden(title) }),
+        onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }),
+      },
+    );
   return (
     <div className="rounded-xl bg-ink-800/70 p-4 ring-1 ring-white/6">
       <div className="flex items-center gap-2 text-sm font-medium text-ink-100">
@@ -544,7 +543,7 @@ function HiddenGames() {
                 {g.dir}
               </span>
             </span>
-            <SmallButton onClick={() => void unhide(g.productId, g.title)} icon={<Undo2 size={13} />}>
+            <SmallButton onClick={() => unhide(g.productId, g.title)} icon={<Undo2 size={13} />}>
               {tr.found.unhide}
             </SmallButton>
           </li>

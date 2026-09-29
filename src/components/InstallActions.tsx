@@ -23,7 +23,7 @@ import { api, toCmdError } from "../lib/api";
 import { formatPercent } from "../lib/format";
 import { showToast } from "../lib/toast";
 import type { Download, Installed, InstallProgress, Store } from "../lib/types";
-import { installOf, useInstalls } from "../hooks/useData";
+import { installOf, useInstalls, useSetFoundHidden } from "../hooks/useData";
 import { useModalHost } from "./Feedback";
 import { FoundMatchDialog } from "./FoundMatchDialog";
 import { IconButton, SmallButton } from "./ui";
@@ -37,6 +37,7 @@ const fail = (e: unknown) => showToast({ tone: "error", title: errorText(toCmdEr
 
 export function useInstallActions() {
   const qc = useQueryClient();
+  const setHidden = useSetFoundHidden();
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["installs"] });
     void qc.invalidateQueries({ queryKey: ["downloads"] });
@@ -74,28 +75,21 @@ export function useInstallActions() {
         .catch(fail),
     /** Takes a found game off the list (its files stay); the toast can undo it. */
     hide: (i: Installed) =>
-      api
-        .setFoundHidden(i.productId, true)
-        .then(() => {
-          refresh();
-          void qc.invalidateQueries({ queryKey: ["hidden-found"] });
-          showToast({
-            tone: "info",
-            title: tr.found.toastHidden(i.title),
-            action: {
-              label: tr.found.unhide,
-              onClick: () =>
-                void api
-                  .setFoundHidden(i.productId, false)
-                  .then(() => {
-                    refresh();
-                    void qc.invalidateQueries({ queryKey: ["hidden-found"] });
-                  })
-                  .catch(fail),
-            },
-          });
-        })
-        .catch(fail),
+      setHidden.mutate(
+        { productId: i.productId, hidden: true },
+        {
+          onSuccess: () =>
+            showToast({
+              tone: "info",
+              title: tr.found.toastHidden(i.title),
+              action: {
+                label: tr.found.unhide,
+                onClick: () => setHidden.mutate({ productId: i.productId, hidden: false }, { onError: fail }),
+              },
+            }),
+          onError: fail,
+        },
+      ),
     approve: (d: Download) => void api.approveInstall(d.id).catch(fail),
     retry: (d: Download) => void api.retryInstall(d.id).catch(fail),
   };
@@ -269,7 +263,7 @@ export function InstallMenu({ installed, placement = "up" }: { installed: Instal
                         {tr.found.steamUninstall}
                       </MenuItem>
                     )}
-                    <MenuItem icon={<EyeOff size={14} />} onClick={() => (close(), void act.hide(installed))} title={tr.found.hideHint}>
+                    <MenuItem icon={<EyeOff size={14} />} onClick={() => (close(), act.hide(installed))} title={tr.found.hideHint}>
                       {tr.found.hide}
                     </MenuItem>
                     {installed.source === "epic" && (

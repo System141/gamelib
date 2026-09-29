@@ -287,6 +287,58 @@ export function useHiddenFound() {
   return useQuery({ queryKey: ["hidden-found"], queryFn: api.getHiddenFound });
 }
 
+/** Takes a found game off the installed list, or puts it back. */
+export function useSetFoundHidden() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ productId, hidden }: { productId: string; hidden: boolean }) => api.setFoundHidden(productId, hidden),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["installs"] });
+      void qc.invalidateQueries({ queryKey: ["hidden-found"] });
+    },
+  });
+}
+
+/** Ties a found game to a Steam game (or, with null, to none); the game comes back updated. */
+export function useMatchFound() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ productId, appid }: { productId: string; appid: number | null }) => api.matchFound(productId, appid),
+    onSuccess: (updated) => {
+      qc.setQueryData<Installed[]>(["installs"], (list) =>
+        list?.map((i) => (i.store === updated.store && i.productId === updated.productId ? updated : i)),
+      );
+      void qc.invalidateQueries({ queryKey: ["installs"] });
+      void qc.invalidateQueries({ queryKey: ["hidden-found"] });
+    },
+  });
+}
+
+/** Catalog games whose names match `term`, most relevant first, for tying a found game to one. */
+export function useGameSearch(term: string, limit: number) {
+  return useQuery({
+    queryKey: ["game-search", term, limit],
+    queryFn: () =>
+      api.queryGames({
+        search: term,
+        tags: [],
+        platforms: [],
+        deck: null,
+        freeOnly: false,
+        minReviewScore: null,
+        showAdult: true,
+        releasedWithinDays: null,
+        hasLinks: false,
+        stores: [],
+        owned: false,
+        sort: "relevance",
+        offset: 0,
+        limit,
+      }),
+    enabled: term.length >= 2,
+  });
+}
+
 /** When the last scan for installed games started (this session). */
 let lastScan = 0;
 const SCAN_AGAIN_AFTER = 5 * 60_000;

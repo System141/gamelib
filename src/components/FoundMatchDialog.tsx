@@ -1,14 +1,14 @@
 // "Bu hangi oyun?": ties a game found on this computer to a Steam game from the catalog (or to
 // none), so its details, prices and reviews can be shown.
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, LoaderCircle, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { errorText, tr } from "../i18n/tr";
-import { api, toCmdError } from "../lib/api";
+import { toCmdError } from "../lib/api";
 import { formatYear } from "../lib/format";
 import { showToast } from "../lib/toast";
 import type { Installed } from "../lib/types";
+import { useGameSearch, useMatchFound } from "../hooks/useData";
 import { useDebounced } from "../hooks/useUtils";
 import { FoundMark } from "./badges";
 import { SmallButton } from "./ui";
@@ -17,32 +17,11 @@ const RESULTS = 8;
 
 export function FoundMatchDialog({ installed, onClose }: { installed: Installed; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const qc = useQueryClient();
+  const match = useMatchFound();
   const [term, setTerm] = useState(installed.title);
   const [saving, setSaving] = useState<number | "none" | null>(null);
   const search = useDebounced(term.trim(), 250);
-  const results = useQuery({
-    queryKey: ["match-search", search],
-    queryFn: () =>
-      api.queryGames({
-        search,
-        tags: [],
-        platforms: [],
-        deck: null,
-        freeOnly: false,
-        minReviewScore: null,
-        showAdult: true,
-        releasedWithinDays: null,
-        hasLinks: false,
-        stores: [],
-        owned: false,
-        sort: "relevance",
-        offset: 0,
-        limit: RESULTS,
-      }),
-    enabled: search.length >= 2,
-    staleTime: 60_000,
-  });
+  const results = useGameSearch(search, RESULTS);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -52,19 +31,17 @@ export function FoundMatchDialog({ installed, onClose }: { installed: Installed;
   const close = () => ref.current?.close();
   const choose = (appid: number | null) => {
     setSaving(appid ?? "none");
-    api
-      .matchFound(installed.productId, appid)
-      .then((updated) => {
-        qc.setQueryData<Installed[]>(["installs"], (list) =>
-          list?.map((i) => (i.store === updated.store && i.productId === updated.productId ? updated : i)),
-        );
-        void qc.invalidateQueries({ queryKey: ["installs"] });
-        void qc.invalidateQueries({ queryKey: ["hidden-found"] });
-        showToast({ tone: "success", title: appid == null ? tr.found.toastUnmatched : tr.found.toastMatched(updated.title) });
-        close();
-      })
-      .catch((e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }))
-      .finally(() => setSaving(null));
+    match.mutate(
+      { productId: installed.productId, appid },
+      {
+        onSuccess: (updated) => {
+          showToast({ tone: "success", title: appid == null ? tr.found.toastUnmatched : tr.found.toastMatched(updated.title) });
+          close();
+        },
+        onError: (e) => showToast({ tone: "error", title: errorText(toCmdError(e)) }),
+        onSettled: () => setSaving(null),
+      },
+    );
   };
 
   const items = results.data?.items ?? [];

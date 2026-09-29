@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-GameLib is a Tauri 2 desktop app (Windows/macOS/Linux) that mirrors the released Steam catalog (~130k games) into a local SQLite database and presents it in a React SPA. It also signs in to GOG and itch.io to read owned libraries, download/install/launch those games, run magnet/`.torrent` downloads through the same queue, open pages in its own browser window, and store user-added external links per game.
+GameLib is a Tauri 2 desktop app (Windows/macOS/Linux) that mirrors the released Steam catalog (~130k games) into a local SQLite database and presents it in a React SPA. It also signs in to GOG and itch.io to read owned libraries, download/install/launch those games, run magnet/`.torrent` downloads through the same queue, open pages in its own browser window, and store user-added external links per game. Game details add purchase help fetched live: trailers and reviews (Steam store), system requirements measured against this PC (`pc/`), and prices from IsThereAnyDeal with the user's own key (`prices/`). "Kurulu" also lists games found on this PC (Steam and Epic libraries, game folders; `install/scan.rs`, `install/found.rs`).
 
 - UI language is Turkish-only (`<html lang="tr">`), region hard-wired to Turkey (USD prices, English descriptions). `README.md` is the user-facing doc and is written in Turkish.
 - One Rust workspace with a React frontend; the browser preview is served by the CLI, not by a standalone web backend.
-- Not implemented (roadmap — do not assume it exists): per-site link handlers beyond the generic one, link export/import, local Steam library scan, favorites, image cache.
+- Not implemented (roadmap — do not assume it exists): per-site link handlers beyond the generic one, link export/import, reading Heroic/Legendary libraries on Linux, favorites, image cache.
 
 ## Architecture & Data Flow
 
@@ -16,12 +16,12 @@ Workspace members (root `Cargo.toml`, `default-members` deliberately excludes `s
 |---|---|---|
 | `gamelib-core` | `crates/gamelib-core` | All domain logic. Zero Tauri dependency; only coupling to shells is the `EventSink` trait (`src/app.rs`). |
 | `gamelib-cli` | `crates/gamelib-cli` | Headless CLI; `serve` re-exposes the same command surface over loopback HTTP (`127.0.0.1:1430`) for the Vite browser preview. |
-| `gamelib` (lib `gamelib_lib`) | `src-tauri` | Thin shell: 52 `#[tauri::command]` wrappers, `tauri-plugin-opener`/`dialog`, window + CSP config. |
+| `gamelib` (lib `gamelib_lib`) | `src-tauri` | Thin shell: 70 `#[tauri::command]` wrappers, `tauri-plugin-opener`/`dialog`, window + CSP config. |
 
 Layering inside `gamelib-core/src/` (all modules declared in `lib.rs`):
 
 1. Helpers: `text.rs`, `date.rs`, `search.rs`, `rating.rs`, `error.rs`, `http.rs`
-2. API clients: `steam/` (`CatalogSource` trait + `SteamClient`), `stores/` (GOG catalog/account, itch.io, GamesDB, title matching, library)
+2. API clients: `steam/` (`CatalogSource` trait + `SteamClient`, reviews, requirements), `stores/` (GOG catalog/account, itch.io, GamesDB, title matching, library), `prices/` (IsThereAnyDeal); `pc/` reads this PC's hardware and parses requirement text
 3. Persistence: `db/` (rusqlite, hand-written SQL, no ORM) + `secrets.rs` (file, not DB)
 4. Pipelines: `sync.rs`, `new_releases.rs`, `downloads/`, `install/`, `links/`
 5. Wire models: `record.rs` (Steam item → `games` row), `model.rs` (all DTOs shared with the frontend)
@@ -62,7 +62,7 @@ Event names (constants declared in the emitting core module, mirrored in `src/li
 
 | Path | Contents |
 |---|---|
-| `crates/gamelib-core/src/` | Domain: `app.rs` (command surface), `sync.rs`, `new_releases.rs`, `steam/`, `stores/`, `db/`, `downloads/`, `install/`, `links/`, `model.rs`, `record.rs`, `secrets.rs`, `error.rs`, `http.rs` |
+| `crates/gamelib-core/src/` | Domain: `app.rs` (command surface), `sync.rs`, `new_releases.rs`, `steam/`, `stores/`, `prices/`, `pc/`, `db/`, `downloads/`, `install/` (incl. `scan.rs`/`found.rs`/`vdf.rs` for games found on this PC), `links/`, `model.rs`, `record.rs`, `secrets.rs`, `error.rs`, `http.rs` |
 | `crates/gamelib-core/tests/` | Integration tests + `common/` fakes + `fixtures/*.json` |
 | `crates/gamelib-cli/src/` | `main.rs` (hand-rolled arg parsing, 10 subcommands), `serve.rs` (loopback HTTP + SSE) |
 | `src-tauri/src/` | `lib.rs` (plugins, state, `invoke_handler`), `commands.rs`, `browser.rs` (in-app browser window: navigation toolbar, magnet/`.torrent` capture), `login.rs` (incognito GOG login window), `error.rs` (`pub use gamelib_core::ErrorInfo as CmdError`) |
@@ -110,7 +110,7 @@ CI (`.github/workflows/build.yml`): `check` (ubuntu) and `check-windows` run for
 - **Serde/IPC:** structs `#[serde(rename_all = "camelCase")]`, enums `snake_case`. `model.rs` and `src/lib/types.ts` are two halves of one contract (`model.rs` says "keep in sync"). Tauri command names are `snake_case`; argument keys are `camelCase` (`product_id` → `productId`).
 - **Enums crossing the DB/string boundary** use their `as_str()`/`parse()` pair; parsers are total and silently fall back, so a wrong string never errors, it behaves wrong.
 - **SQLite:** never `INSERT OR REPLACE` into `games` (it fires the delete trigger and desyncs the external-content FTS index) — use `ON CONFLICT(appid) DO UPDATE`. Booleans are INTEGER 0/1. JSON-in-TEXT columns must stay JSON arrays (`json_each` reads them). Migrations are append-only (`MIGRATION_N` + `PRAGMA user_version`); **editing an applied migration is invisible on existing DBs**. No foreign keys by design — deletes are flags (`games.delisted`, `store_products.in_catalog`), and user data (links, matches, installs) must survive catalog refreshes.
-- **Positional row decoding is frozen:** `CARD_COLUMNS` + `CARD_WIDTH = 22` (`db/read.rs`) and the `COLUMNS`/`row` pairs in `db/{downloads,installs,links}.rs`. Append columns at the end and bump the width.
+- **Positional row decoding is frozen:** `CARD_COLUMNS` + `CARD_WIDTH = 22` (`db/read.rs`) and the `COLUMNS`/`row` pairs in `db/{downloads,found,installs,links}.rs`. Append columns at the end and bump the width.
 - **Duplicated constants that must move together:** `CONFIDENT = 0.85` in `stores/matching.rs`, `CONFIDENT_SQL` in `db/stores.rs`, and the inline rule in `CARD_COLUMNS`/`build_filter`. Match precedence Manual > GamesDB > Title is encoded in SQL — never invert it.
 - **Queue state changes** go through the CAS helpers `queue::transition` / `transition_install` / `set_install_state` (`db/downloads.rs`); never `UPDATE downloads SET state = …` directly.
 - **HTTP politeness:** all API GETs go through `http::get_text`/`get_json` (retry on transient/429/5xx, `Retry-After`, backoff, counters) and bulk loops use a `Pacer`. The download client must keep `no_gzip()` and its 10-redirect cap (byte offsets); the link-check client keeps `Policy::none()`.
@@ -161,14 +161,14 @@ CI (`.github/workflows/build.yml`): `check` (ubuntu) and `check-windows` run for
 - Tailwind CSS v4 via `@tailwindcss/vite`; no `tailwind.config.*` — all tokens live in `src/index.css` `@theme`.
 - Vite dev server pins port 1420 and ignores `src-tauri/`, `crates/`, `target/`; env prefixes `VITE_`, `TAURI_ENV_`.
 - Windows-first behaviors are real and load-bearing: DPAPI secrets, `ShellExecuteExW`/UAC, Mark-of-the-Web, registry read for GOG installs (`install/windows.rs` is entirely `#[cfg(windows)]`).
-- Network-touching features need no API keys (keyless Steam store endpoints); corporate proxies work through `HTTPS_PROXY`.
+- Network-touching features need no API keys (keyless Steam store endpoints); the one exception is the optional prices section, which uses the user's own IsThereAnyDeal key from `secrets.bin` (sent only in the `ITAD-API-Key` header). Corporate proxies work through `HTTPS_PROXY`.
 - Archives: zip/7z/tar(.gz/.bz2/.xz) are extractable; RAR is deliberately not.
 
 ## Testing & QA
 
-- **Rust:** `cargo test` at the root runs `gamelib-core` + `gamelib-cli` (hermetic, no GTK). Integration tests live in `crates/gamelib-core/tests/*.rs`; inline unit tests are `#[cfg(test)]` modules inside `src/` (25 files in core, 2 in cli).
+- **Rust:** `cargo test` at the root runs `gamelib-core` + `gamelib-cli` (hermetic, no GTK). Integration tests live in `crates/gamelib-core/tests/*.rs`; inline unit tests are `#[cfg(test)]` modules inside `src/` (36 files in core, 2 in cli).
 - **Two fake harnesses, no HTTP mocking crates:** `tests/common/mod.rs` provides `FakeSource` (in-memory `CatalogSource` with per-request `hook`/`fail_at`/`cancel_at`) and `tests/common/http.rs` provides `TestServer` (real sockets on `127.0.0.1:0`, supports paced/dropped transfers). `tests/links.rs` rolls its own tiny server. DB tests use `Db::open_in_memory()`; temp dirs are per-test and removed on `Drop`.
 - **Hermetic by default:** every test except `tests/live.rs` must pass offline — a network failure anywhere else is a real bug. `live.rs` is `#[ignore]`d and hits `api.steampowered.com` (`cargo test -p gamelib-core -- --ignored`); it is intentionally not in CI. Download-transfer tests are Windows-only except one `#[cfg(not(windows))]` case.
-- **Frontend:** Vitest (`pnpm test` = `vitest run`) with no config file, default Node environment, globals off, DOM tests absent. The single suite `src/lib/lib.test.ts` covers `lib/format.ts`, `lib/fold.ts`, `lib/grid.ts` and `i18n/tr.ts` with hard-coded Turkish expectations. Put new logic that needs a test in `src/lib/`.
+- **Frontend:** Vitest (`pnpm test` = `vitest run`) with no config file, default Node environment, globals off, DOM tests absent. The single suite `src/lib/lib.test.ts` covers `lib/format.ts`, `lib/fold.ts`, `lib/grid.ts`, `lib/requirements.ts`, `lib/prices.ts` and `i18n/tr.ts` with hard-coded Turkish expectations. Put new logic that needs a test in `src/lib/`.
 - **What CI gates:** `pnpm format:check`, `pnpm test`, `pnpm build` (typecheck), `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, then the platform test matrix.
 - When changing behavior, exercise the real path (`cargo test -p gamelib-core --test <file>` or `pnpm test` + a `pnpm tauri dev`/`pnpm serve` smoke), not just a compile.
